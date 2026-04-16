@@ -51,6 +51,8 @@ async def validate_cli(
         "mcp__validation__exec",
         "mcp__validation__list_tools",
         "mcp__validation__call_tool",
+        "mcp__validation__session_log",
+        "mcp__validation__session_screenshots",
         "mcp__valid__valid_create",
         "mcp__valid__valid_add_screenshot",
         "mcp__valid__valid_add_text",

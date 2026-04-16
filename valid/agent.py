@@ -29,7 +29,9 @@ TOOLS:
 - exec(command, daemon): run a bash command on a daemon (or locally if daemon omitted)
 - list_tools(daemon): discover tools hosted on a daemon — browser automation, etc.
 - call_tool(daemon, name, arguments): invoke a daemon-hosted tool. arguments is a JSON string.
-  Screenshots returned by call_tool are saved to local temp files automatically.
+  Screenshots returned by call_tool are saved to the session directory automatically.
+- session_log: return the full session log (chronological record of every tool call + results)
+- session_screenshots: return paths to all screenshots taken during this session
 - valid_create, valid_add_text, valid_add_screenshot, valid_render: build a visual QA report
 
 TASK THAT WAS IMPLEMENTED:
@@ -67,14 +69,15 @@ If browser tools were discovered in Phase 1:
    present? Does the feature work end-to-end through the browser, not just via curl?
 
 Phase 4 — Report
-8. Create a validation report (valid_create) with a clear title.
-9. For each test phase, add a section:
-   - Use valid_add_text(format="prose") to narrate what you tested and what you observed.
-     Prose supports **bold**, *italic*, lists, and other markdown.
-   - Use valid_add_text(format="code") for log excerpts and command output.
-   - Use valid_add_screenshot for every browser screenshot you took. Include screenshots
-     of both expected states (feature working) and any failures.
-10. Render the report with valid_render.
+8. Call session_screenshots to get all screenshot paths from the session.
+9. Create a validation report (valid_create) with a clear title.
+10. For each test phase, add a section:
+    - Use valid_add_text(format="prose") to narrate what you tested and what you observed.
+      Prose supports **bold**, *italic*, lists, and other markdown.
+    - Use valid_add_text(format="code") for log excerpts and command output.
+    - Use valid_add_screenshot for screenshots from the session. Include screenshots
+      of both expected states (feature working) and any failures.
+11. Render the report with valid_render.
 
 Your report should tell a complete story: functional tests, visual confirmation, what
 worked, what didn't. Include endpoint URLs, status codes, log lines, and screenshots.
