@@ -111,6 +111,14 @@ async def validate_cli(
         try:
             return json.loads(result_text)
         except (json.JSONDecodeError, TypeError):
+            # Agent sometimes wraps JSON in prose — extract it.
+            start = result_text.find("{")
+            end = result_text.rfind("}")
+            if start != -1 and end > start:
+                try:
+                    return json.loads(result_text[start : end + 1])
+                except (json.JSONDecodeError, TypeError):
+                    pass
             return {"status": "unknown", "reason": str(result_text), "report_path": None}
 
     except FileNotFoundError:
