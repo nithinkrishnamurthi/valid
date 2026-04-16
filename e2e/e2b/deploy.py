@@ -69,18 +69,25 @@ def _tarball(src_dir: str, arcname: str) -> bytes:
 def _wait_for_docker(sbx: Sandbox, timeout: int = DOCKER_READY_TIMEOUT) -> None:
     """Block until `sudo docker info` succeeds inside the sandbox.
 
-    get.docker.com usually auto-starts dockerd via systemd at sandbox boot,
-    but we explicitly nudge it once in case that didn't happen.
+    get.docker.com installs dockerd as a systemd service that auto-starts
+    at sandbox boot, but the first `docker info` after boot can hang for
+    a while waiting on dockerd to finish initializing. We catch HTTP-stream
+    timeouts from slow commands and keep polling.
     """
-    sbx.commands.run("sudo service docker start || true", timeout=10)
-
     deadline = time.time() + timeout
+    last_err = None
     while time.time() < deadline:
-        r = sbx.commands.run("sudo docker info", timeout=5)
-        if r.exit_code == 0:
-            return
-        time.sleep(2)
-    raise TimeoutError("dockerd not ready inside sandbox after %ds" % timeout)
+        try:
+            r = sbx.commands.run("sudo docker info", timeout=10)
+            if r.exit_code == 0:
+                return
+            last_err = r.stderr
+        except Exception as e:
+            last_err = repr(e)
+        time.sleep(3)
+    raise TimeoutError(
+        f"dockerd not ready inside sandbox after {timeout}s. Last error:\n{last_err}"
+    )
 
 
 def _all_healthy(sbx: Sandbox, compose_file: str) -> bool:
