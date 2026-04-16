@@ -158,11 +158,13 @@ async def _validate_cli(
 
             etype = event.get("type")
             if etype == "assistant":
-                # Print assistant text as it streams
                 msg = event.get("message", {})
                 for block in msg.get("content", []):
                     if block.get("type") == "text":
                         print(block["text"])
+                    elif block.get("type") == "tool_use":
+                        name = block.get("name", "?")
+                        print(f"  → {name}()")
             elif etype == "result":
                 result_text = event.get("result", "")
 
