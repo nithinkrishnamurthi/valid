@@ -121,7 +121,8 @@ def deploy(
     daemon_bin = _build_daemon_linux_amd64()
 
     print(f"Creating E2B sandbox from template {template_id}...")
-    sbx = Sandbox(template=template_id)
+    # Default sandbox timeout is 5 min — bump for docker compose + tests.
+    sbx = Sandbox.create(template=template_id, timeout=900)
     token = f"eph_{uuid.uuid4().hex[:16]}"
 
     try:
