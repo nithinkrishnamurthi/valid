@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrderFlow Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#1a1a2e;display:flex;min-height:100vh}
+
+.sidebar{width:220px;background:#1a1a2e;color:#a0a0b8;padding:20px 0;flex-shrink:0}
+.sidebar .logo{padding:0 20px 20px;font-size:18px;font-weight:700;color:#fff;border-bottom:1px solid #2d2d44;margin-bottom:12px}
+.sidebar nav a{display:block;padding:10px 20px;color:#a0a0b8;text-decoration:none;font-size:14px}
+.sidebar nav a:hover,.sidebar nav a.active{background:#2d2d44;color:#fff}
+.sidebar nav a.active{border-left:3px solid #6366f1}
+
+.main{flex:1;padding:28px}
+.main h1{font-size:22px;margin-bottom:20px;color:#111827}
+
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card .label{font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.card .value{font-size:26px;font-weight:700;color:#111827}
+
+.table-wrap{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.table-wrap h2{font-size:16px;margin-bottom:14px;color:#111827}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;border-bottom:2px solid #e5e7eb}
+td{padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:13px}
+tr:hover td{background:#f9fafb}
+.amount{font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">OrderFlow</div>
+  <nav>
+    <a href="#" class="active">Dashboard</a>
+    <a href="#">Orders</a>
+    <a href="#">Customers</a>
+    <a href="#">Products</a>
+    <a href="#">Settings</a>
+  </nav>
+</div>
+
+<div class="main">
+  <h1>Dashboard</h1>
+
+  <div class="metrics">
+    <div class="card"><div class="label">Total Orders</div><div class="value" id="m-orders">&mdash;</div></div>
+    <div class="card"><div class="label">Revenue</div><div class="value" id="m-revenue">&mdash;</div></div>
+    <div class="card"><div class="label">Customers</div><div class="value" id="m-customers">&mdash;</div></div>
+    <div class="card"><div class="label">Avg Order Value</div><div class="value" id="m-avg">&mdash;</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <h2>Recent Orders</h2>
+    <table>
+      <thead>
+        <tr><th>Order</th><th>Customer</th><th>Product</th><th>Amount</th><th>Status</th><th>Date</th></tr>
+      </thead>
+      <tbody id="orders"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(async()=>{
+  const [m, orders] = await Promise.all([
+    fetch('/api/metrics').then(r=>r.json()),
+    fetch('/api/orders').then(r=>r.json()),
+  ]);
+  document.getElementById('m-orders').textContent = m.total_orders;
+  document.getElementById('m-revenue').textContent = '$'+m.revenue.toLocaleString('en-US',{minimumFractionDigits:2});
+  document.getElementById('m-customers').textContent = m.customers;
+  document.getElementById('m-avg').textContent = '$'+m.avg_order_value.toFixed(2);
+
+  document.getElementById('orders').innerHTML = orders.map(o=>`
+    <tr>
+      <td>#${o.id}</td>
+      <td>${o.customer_name}</td>
+      <td>${o.product}</td>
+      <td class="amount">$${o.amount.toFixed(2)}</td>
+      <td>${o.status}</td>
+      <td>${new Date(o.created_at).toLocaleDateString()}</td>
+    </tr>`).join('');
+})();
+</script>
+</body>
+</html>
