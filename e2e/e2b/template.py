@@ -5,7 +5,7 @@ Run this once (per E2B account) before using run.py:
     cd e2e/e2b
     uv run template.py
 
-It prints the template ID to put in ../../.env as E2B_TEMPLATE_ID.
+It prints the template ID to put in e2e/e2b/.env as E2B_TEMPLATE_ID.
 """
 
 import os
@@ -21,10 +21,10 @@ TEMPLATE_NAME = "valid-docker-compose"
 
 
 def main():
-    load_dotenv(os.path.join(HERE, "..", "..", ".env"))
+    load_dotenv(os.path.join(HERE, ".env"))
 
     if not os.environ.get("E2B_API_KEY"):
-        print("Missing E2B_API_KEY. Set it in ../../.env — see README.md", file=sys.stderr)
+        print("Missing E2B_API_KEY. Set it in e2e/e2b/.env — see README.md", file=sys.stderr)
         sys.exit(1)
 
     # Print build logs as they stream.
@@ -59,7 +59,7 @@ def main():
     print(f"  template_id:   {info.template_id}")
     print(f"  template_name: {info.name}")
     print()
-    print("Add this line to ../../.env:")
+    print("Add this line to e2e/e2b/.env:")
     print(f"    E2B_TEMPLATE_ID={info.template_id}")
 
 
