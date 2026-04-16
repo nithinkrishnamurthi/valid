@@ -1,7 +1,7 @@
 """E2B deploy — spins up a sandbox from a custom Docker-enabled template,
 uploads the app, runs docker compose, and starts the exec daemon.
 
-Requires (in ../../.env):
+Requires (in the repo-root .env):
     E2B_API_KEY=...              # from https://e2b.dev/dashboard
     E2B_TEMPLATE_ID=...          # from `e2b template build` in this dir
 
