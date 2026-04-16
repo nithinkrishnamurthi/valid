@@ -77,10 +77,11 @@ def _build_prompt(task: str, implementation_summary: str, diff: str) -> str:
 
 def _mcp_config() -> dict:
     """MCP server config used by both backends."""
+    import sys
     return {
         "mcpServers": {
             "validation": {
-                "command": "python",
+                "command": sys.executable,
                 "args": [VALIDATION_TOOLS_SERVER],
             },
             "valid": {
@@ -109,40 +110,55 @@ async def _validate_cli(
         json.dump(mcp_conf, f)
         mcp_config_path = f.name
 
-    allowed = [
+    allowed = ",".join([
         "mcp__validation__discover_daemons",
         "mcp__validation__exec",
         "mcp__valid__valid_create",
         "mcp__valid__valid_add_screenshot",
         "mcp__valid__valid_add_text",
         "mcp__valid__valid_render",
-    ]
+    ])
+
+    # Write system prompt to file to avoid CLI arg length limits
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", delete=False, prefix="valid-prompt-"
+    ) as pf:
+        pf.write(prompt)
+        prompt_path = pf.name
 
     cmd = [
         "claude",
         "-p", "Begin validation.",
         "--system-prompt", prompt,
         "--mcp-config", mcp_config_path,
-        "--allowedTools", json.dumps(allowed),
+        "--allowedTools", allowed,
         "--max-turns", str(MAX_TURNS),
         "--output-format", "json",
     ]
 
     try:
+        print(f"Running: claude -p ... --mcp-config {mcp_config_path}")
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=600,
+            stdin=subprocess.DEVNULL,
         )
 
+        if proc.stderr:
+            print(f"Claude Code stderr: {proc.stderr[:500]}")
+
         if proc.returncode != 0:
-            print(f"Claude Code stderr: {proc.stderr}")
             return {"status": "unknown", "reason": proc.stderr, "report_path": None}
 
+        if not proc.stdout.strip():
+            return {"status": "unknown", "reason": "Claude Code returned empty output", "report_path": None}
+
         result = json.loads(proc.stdout)
-        # Claude Code JSON output has a "result" field with the final text
-        result_text = result.get("result", proc.stdout)
+        result_text = result.get("result", "")
+
+        print(f"Claude Code result: {result_text[:500]}")
 
         # The agent's final message should be JSON
         try:
@@ -158,6 +174,7 @@ async def _validate_cli(
         )
     finally:
         os.unlink(mcp_config_path)
+        os.unlink(prompt_path)
 
 
 # ---------------------------------------------------------------------------
