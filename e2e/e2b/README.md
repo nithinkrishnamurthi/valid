@@ -9,7 +9,7 @@ connects to the sandbox via a Go daemon and runs commands remotely.
 
 ### 1. Get your E2B API key
 
-Copy it from https://e2b.dev/dashboard and add to `.env` at the repo root:
+Copy it from https://e2b.dev/dashboard and add to `.env` in this directory (`e2e/e2b/.env`):
 
 ```ini
 E2B_API_KEY=e2b_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -32,13 +32,13 @@ When the build finishes it prints something like:
   template_id:   abcd1234efgh5678
   template_name: valid-docker-compose
 
-Add this line to ../../.env:
+Add this line to e2e/e2b/.env:
     E2B_TEMPLATE_ID=abcd1234efgh5678
 ```
 
 ### 3. Add the template ID to `.env`
 
-Append the line it printed to the repo-root `.env`:
+Append the line it printed to `e2e/e2b/.env`:
 
 ```ini
 E2B_API_KEY=e2b_xxxxxxxxxxxxxxxxxxxxxxxxxxxx

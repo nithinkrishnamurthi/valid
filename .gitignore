@@ -1,4 +1,4 @@
-node_modules/
+valid-mcp/node_modules/
 valid-mcp/dist/
 .valid/
 .venv/

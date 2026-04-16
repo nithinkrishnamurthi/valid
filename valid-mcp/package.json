@@ -4,13 +4,13 @@
   "description": "MCP server that composites screenshots and text into rendered PNG validation images",
   "type": "module",
   "bin": {
-    "valid": "valid-mcp/dist/index.js"
+    "valid": "dist/index.js"
   },
   "scripts": {
-    "build": "esbuild valid-mcp/src/index.ts --bundle --platform=node --format=esm --external:sharp --external:playwright-core --outfile=valid-mcp/dist/index.js --banner:js='#!/usr/bin/env node'",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:sharp --external:playwright-core --outfile=dist/index.js --banner:js='#!/usr/bin/env node'",
     "postinstall": "playwright-core install chromium",
     "prepublishOnly": "npm run build",
-    "dev": "tsx valid-mcp/src/index.ts"
+    "dev": "tsx src/index.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
