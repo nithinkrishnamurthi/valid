@@ -22,12 +22,16 @@ def deploy(
     2. Wait for services to be healthy
     3. Return bundle
     """
-    subprocess.run(
+    up = subprocess.run(
         ["docker", "compose", "-f", compose_file, "up", "-d", "--build"],
         cwd=compose_dir,
-        check=True,
         capture_output=True,
+        text=True,
     )
+    if up.returncode != 0:
+        print(up.stdout)
+        print(up.stderr)
+        up.check_returncode()
 
     deadline = time.time() + HEALTH_TIMEOUT
     while time.time() < deadline:
