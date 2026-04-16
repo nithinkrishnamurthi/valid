@@ -8,6 +8,69 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function renderMarkdown(text: string): string {
+  // Process block-level elements first, then inline
+  const lines = text.split("\n");
+  const blocks: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Blank line
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+    // Unordered list
+    if (/^[\-\*]\s/.test(line.trim())) {
+      const items: string[] = [];
+      while (i < lines.length && /^[\-\*]\s/.test(lines[i].trim())) {
+        items.push(`<li>${inlineMarkdown(escapeHtml(lines[i].trim().slice(2)))}</li>`);
+        i++;
+      }
+      blocks.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\.\s/.test(line.trim())) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+        items.push(`<li>${inlineMarkdown(escapeHtml(lines[i].trim().replace(/^\d+\.\s/, "")))}</li>`);
+        i++;
+      }
+      blocks.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    // Regular paragraph — collect consecutive non-empty, non-special lines
+    const paraLines: string[] = [];
+    while (i < lines.length && lines[i].trim() !== "" && !/^[\-\*]\s/.test(lines[i].trim()) && !/^\d+\.\s/.test(lines[i].trim())) {
+      paraLines.push(lines[i]);
+      i++;
+    }
+    blocks.push(`<p>${inlineMarkdown(escapeHtml(paraLines.join("\n")))}</p>`);
+  }
+
+  return blocks.join("\n");
+}
+
+function inlineMarkdown(html: string): string {
+  return html
+    // Bold: **text** or __text__
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/__(.+?)__/g, "<strong>$1</strong>")
+    // Italic: *text* or _text_
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/(?<!\w)_(.+?)_(?!\w)/g, "<em>$1</em>")
+    // Inline code: `text`
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    // Line breaks
+    .replace(/\n/g, "<br>");
+}
+
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -44,9 +107,10 @@ function renderItem(item: Item): string {
       </div>`;
   }
 
+  const rendered = renderMarkdown(item.content || "");
   return `
     <div class="item prose-item">
-      <p>${content}</p>
+      ${rendered}
     </div>`;
 }
 
@@ -192,7 +256,41 @@ export function buildHtml(report: Report): string {
     font-size: 14px;
     color: #374151;
     line-height: 1.7;
-    white-space: pre-wrap;
+    margin-bottom: 8px;
+  }
+
+  .prose-item p:last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-item strong {
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .prose-item em {
+    font-style: italic;
+  }
+
+  .prose-item code {
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 12px;
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #1f2937;
+  }
+
+  .prose-item ul, .prose-item ol {
+    font-size: 14px;
+    color: #374151;
+    line-height: 1.7;
+    margin-bottom: 8px;
+    padding-left: 24px;
+  }
+
+  .prose-item li {
+    margin-bottom: 2px;
   }
 
   /* Code/text blocks */
