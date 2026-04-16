@@ -1,0 +1,14 @@
+# E2B template config. Run `e2b template build` in this directory to
+# build/update the template and write the template_id below.
+#
+# This file is generated+updated by the e2b CLI. Commit it so other clones
+# of the repo know which template name to reference — but note the
+# underlying template_id is tied to your E2B account, so each user must
+# run `e2b template build` once to register the template under their own
+# account. The resulting ID goes in ../../.env as E2B_TEMPLATE_ID.
+
+template_name = "valid-docker-compose"
+dockerfile = "e2b.Dockerfile"
+cpu_count = 2
+memory_mb = 2048
+start_cmd = "/usr/local/bin/start-docker.sh"

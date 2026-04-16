@@ -5,3 +5,5 @@ valid-mcp/dist/
 .env
 __pycache__/
 *.egg-info/
+daemon/daemon
+daemon/daemon.linux-amd64

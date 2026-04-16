@@ -1,9 +1,12 @@
 """
-Local closed-loop e2e: coding agent implements a ticket, docker compose
-deploy, validation agent verifies, coding agent fixes if needed.
+E2B closed-loop e2e: coding agent implements a ticket, deploys to an
+E2B sandbox with docker compose, validation agent verifies, coding
+agent fixes if needed.
+
+First-time setup: see README.md in this directory.
 
 Usage:
-    cd e2e/local
+    cd e2e/e2b
     uv run run.py
     uv run run.py --backend cli
     uv run run.py --max-attempts 3
