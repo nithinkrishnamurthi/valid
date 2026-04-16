@@ -4,6 +4,7 @@ No daemon needed: the validation agent runs on the same machine
 and executes commands locally via the exec tool.
 """
 
+import json
 import os
 import subprocess
 import time
@@ -11,6 +12,27 @@ import time
 
 POLL_INTERVAL = 3
 HEALTH_TIMEOUT = 90
+
+
+def _all_healthy(compose_dir: str, compose_file: str) -> bool:
+    """Check if all services with health checks are healthy."""
+    result = subprocess.run(
+        ["docker", "compose", "-f", compose_file, "ps", "--format", "json"],
+        cwd=compose_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    for line in result.stdout.strip().splitlines():
+        try:
+            svc = json.loads(line)
+        except json.JSONDecodeError:
+            return False
+        health = svc.get("Health", "")
+        if health in ("unhealthy", "starting"):
+            return False
+    return True
 
 
 def deploy(
@@ -35,13 +57,7 @@ def deploy(
 
     deadline = time.time() + HEALTH_TIMEOUT
     while time.time() < deadline:
-        result = subprocess.run(
-            ["docker", "compose", "-f", compose_file, "ps", "--format", "json"],
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0 and "unhealthy" not in result.stdout and "starting" not in result.stdout:
+        if _all_healthy(compose_dir, compose_file):
             break
         time.sleep(POLL_INTERVAL)
     else:
@@ -81,13 +97,7 @@ def redeploy(bundle: dict) -> None:
 
     deadline = time.time() + HEALTH_TIMEOUT
     while time.time() < deadline:
-        result = subprocess.run(
-            ["docker", "compose", "-f", compose_file, "ps", "--format", "json"],
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0 and "unhealthy" not in result.stdout and "starting" not in result.stdout:
+        if _all_healthy(compose_dir, compose_file):
             return
         time.sleep(POLL_INTERVAL)
 
