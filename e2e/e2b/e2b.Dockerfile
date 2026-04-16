@@ -8,6 +8,10 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y \
         ca-certificates curl git sudo \
     && curl -fsSL https://get.docker.com | sh \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g @playwright/mcp playwright \
+    && playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # E2B's default sandbox user is "user" (not root). Add it to the docker
