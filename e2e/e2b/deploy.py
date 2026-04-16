@@ -17,6 +17,7 @@ import tarfile
 import time
 import uuid
 
+import requests
 from dotenv import load_dotenv
 from e2b_code_interpreter import Sandbox
 
@@ -247,6 +248,20 @@ def deploy(
         daemon_url = f"https://{sbx.get_host(DAEMON_PORT)}"
         daemon_name = f"e2b-{sbx.sandbox_id}"
         registry.register(daemon_name, daemon_url, token)
+
+        # Log available MCP tools so we can verify the gateway is working.
+        try:
+            r = requests.get(
+                f"{daemon_url}/tools",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            tools = r.json().get("tools", [])
+            print(f"Daemon MCP tools ({len(tools)}):")
+            for t in tools:
+                print(f"  - {t['name']}: {t.get('description', '')[:80]}")
+        except Exception as e:
+            print(f"Warning: could not list daemon tools: {e}")
 
         return {
             "sandbox": sbx,
