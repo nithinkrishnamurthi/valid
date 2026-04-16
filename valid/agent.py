@@ -1,5 +1,5 @@
 """
-Validation orchestrator — runs a read-only validation agent against a
+Validation agent — runs a read-only validation agent against a
 deployed environment, returns verdict + report.
 
 Supports two backends:
