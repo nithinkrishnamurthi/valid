@@ -1,9 +1,13 @@
 """Deploy function — spins up an E2B sandbox, deploys code, starts the daemon."""
 
 import os
+import sys
 import uuid
 import time
 from e2b_code_interpreter import Sandbox
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+import registry
 
 
 DAEMON_PORT = 9090
@@ -64,6 +68,7 @@ def deploy(
         raise RuntimeError(f"Daemon failed to start: {result.stderr}")
 
     daemon_url = f"https://{sbx.get_host(DAEMON_PORT)}"
+    registry.register(f"e2b-{sbx.sandbox_id}", daemon_url, token)
 
     return {
         "sandbox": sbx,
@@ -101,6 +106,7 @@ def redeploy(bundle: dict) -> None:
 
 
 def teardown(bundle: dict) -> None:
-    """Kill the E2B sandbox."""
+    """Kill the E2B sandbox and unregister from registry."""
     sbx: Sandbox = bundle["sandbox"]
+    registry.unregister(f"e2b-{sbx.sandbox_id}")
     sbx.kill()
