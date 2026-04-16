@@ -90,6 +90,7 @@ def _run_coding_agent(prompt: str) -> dict:
         "--system-prompt", system,
         "--allowedTools", "Edit,Write,Read,Bash,Glob,Grep",
         "--output-format", "stream-json",
+        "--verbose",
         "--max-turns", "30",
     ]
 

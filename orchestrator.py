@@ -134,6 +134,7 @@ async def _validate_cli(
         "--allowedTools", allowed,
         "--max-turns", str(MAX_TURNS),
         "--output-format", "stream-json",
+        "--verbose",
     ]
 
     try:
