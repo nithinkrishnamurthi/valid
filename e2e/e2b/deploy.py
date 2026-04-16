@@ -66,6 +66,35 @@ def _tarball(src_dir: str, arcname: str) -> bytes:
     return buf.getvalue()
 
 
+def _upload_app(sbx: Sandbox, compose_dir: str) -> None:
+    """Tar up compose_dir and write it into /home/user/app inside the sandbox.
+
+    Uses paths under /home/user (owned by the `user` account) and sudo-cleans
+    any leftover files so a fresh upload always overwrites cleanly. The app
+    dir itself (/home/user/app) isn't removed — it's a user-owned WORKDIR
+    set up at template build time — we just clear its contents.
+    """
+    stage_tar = "/home/user/_upload.tar.gz"
+    stage_dir = "/home/user/_upload"
+
+    # Clean any leftovers from a previous deploy; use sudo in case something
+    # along the way (e.g. a docker mount) chowned files to root.
+    sbx.commands.run(
+        f"sudo rm -rf {stage_tar} {stage_dir} && "
+        "sudo rm -rf /home/user/app/* /home/user/app/.[!.]*",
+        timeout=10,
+    )
+
+    sbx.files.write(stage_tar, _tarball(compose_dir, arcname="app"))
+
+    sbx.commands.run(
+        f"mkdir -p {stage_dir} && tar -xzf {stage_tar} -C {stage_dir} && "
+        f"cp -r {stage_dir}/app/. /home/user/app/ && "
+        f"rm -rf {stage_tar} {stage_dir}",
+        timeout=30,
+    )
+
+
 def _wait_for_docker(sbx: Sandbox, timeout: int = DOCKER_READY_TIMEOUT) -> None:
     """Block until `sudo docker info` succeeds inside the sandbox.
 
@@ -137,14 +166,7 @@ def deploy(
         _wait_for_docker(sbx)
 
         print("Uploading app...")
-        tarball = _tarball(compose_dir, arcname="app")
-        sbx.files.write("/tmp/app.tar.gz", tarball)
-        # Extract into /tmp/app, then copy contents into /home/user/app
-        # (which is owned by `user` per the template Dockerfile).
-        sbx.commands.run(
-            "tar -xzf /tmp/app.tar.gz -C /tmp && cp -r /tmp/app/. /home/user/app/",
-            timeout=30,
-        )
+        _upload_app(sbx, compose_dir)
 
         print("Running docker compose up...")
         r = sbx.commands.run(
@@ -213,13 +235,7 @@ def redeploy(bundle: dict) -> None:
     compose_file = bundle["compose_file"]
 
     print("Re-uploading app with changes...")
-    tarball = _tarball(compose_dir, arcname="app")
-    sbx.files.write("/tmp/app.tar.gz", tarball)
-    sbx.commands.run(
-        "rm -rf /home/user/app/* && tar -xzf /tmp/app.tar.gz -C /tmp && "
-        "cp -r /tmp/app/. /home/user/app/",
-        timeout=30,
-    )
+    _upload_app(sbx, compose_dir)
 
     print("Restarting services...")
     sbx.commands.run(f"cd /home/user/app && sudo docker compose -f {compose_file} down", timeout=60)
