@@ -13,6 +13,7 @@ import (
 
 func main() {
 	port := flag.Int("port", 9090, "port to listen on")
+	mcpConfig := flag.String("mcp-config", "", "path to MCP server configuration file")
 	flag.Parse()
 
 	token := os.Getenv("DAEMON_TOKEN")
@@ -33,6 +34,16 @@ func main() {
 	allPlugins := []plugins.Plugin{
 		&plugins.ExecPlugin{},
 	}
+
+	if *mcpConfig != "" {
+		mcpPlugin, err := plugins.NewMCPPlugin(*mcpConfig)
+		if err != nil {
+			log.Fatalf("Failed to initialize MCP plugin: %v", err)
+		}
+		defer mcpPlugin.Shutdown()
+		allPlugins = append(allPlugins, mcpPlugin)
+	}
+
 	for _, p := range allPlugins {
 		p.RegisterRoutes(authedMux)
 		log.Printf("Registered plugin: %s", p.Name())

@@ -49,6 +49,8 @@ async def validate_cli(
     allowed = ",".join([
         "mcp__validation__discover_daemons",
         "mcp__validation__exec",
+        "mcp__validation__list_tools",
+        "mcp__validation__call_tool",
         "mcp__valid__valid_create",
         "mcp__valid__valid_add_screenshot",
         "mcp__valid__valid_add_text",
