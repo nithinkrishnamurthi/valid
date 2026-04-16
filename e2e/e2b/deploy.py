@@ -67,7 +67,13 @@ def _tarball(src_dir: str, arcname: str) -> bytes:
 
 
 def _wait_for_docker(sbx: Sandbox, timeout: int = DOCKER_READY_TIMEOUT) -> None:
-    """Block until `docker info` succeeds inside the sandbox."""
+    """Block until `sudo docker info` succeeds inside the sandbox.
+
+    get.docker.com usually auto-starts dockerd via systemd at sandbox boot,
+    but we explicitly nudge it once in case that didn't happen.
+    """
+    sbx.commands.run("sudo service docker start || true", timeout=10)
+
     deadline = time.time() + timeout
     while time.time() < deadline:
         r = sbx.commands.run("sudo docker info", timeout=5)

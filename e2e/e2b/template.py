@@ -32,19 +32,11 @@ def main():
         msg = getattr(entry, "message", str(entry))
         print(f"  {msg}")
 
-    template = (
-        Template()
-        .from_dockerfile(DOCKERFILE)
-        .set_start_cmd(
-            # Launch dockerd as the sandbox's long-running init process.
-            # Runs as `user` (E2B default), so sudo to elevate. Foreground —
-            # the sandbox treats start_cmd as PID 1 of the process tree.
-            "sudo dockerd",
-            # Ready when the daemon responds. sudo so the check doesn't
-            # depend on the user's group membership being active yet.
-            "sudo docker info",
-        )
-    )
+    # No set_start_cmd: the get.docker.com install script sets up dockerd
+    # as a systemd service that auto-starts at sandbox boot. deploy.py polls
+    # for readiness and can fall back to `sudo service docker start` if
+    # dockerd isn't up yet.
+    template = Template().from_dockerfile(DOCKERFILE)
 
     print(f"Building template '{TEMPLATE_NAME}' (2 CPU, 2 GB RAM)...")
     info = Template.build(
