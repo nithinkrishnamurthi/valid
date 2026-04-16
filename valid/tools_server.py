@@ -1,5 +1,5 @@
 """
-Standalone MCP server exposing daemon tools + session log.
+Standalone MCP server exposing daemon tools + session assets.
 
 Used by both the Agent SDK backend and Claude Code CLI backend via stdio:
     python -m valid.tools_server
@@ -19,44 +19,45 @@ from valid import registry
 
 mcp = FastMCP("validation-tools")
 
-# ── Session log ──────────────────────────────────────────────────────
-# Append-only JSONL log of every tool call, its result, and any images.
-# Screenshots are saved into the session directory with sequential names.
+# ── Session ──────────────────────────────────────────────────────────
+# Assets are the things the agent wants to keep for the report:
+# screenshots, log snippets, command output, etc. Each has a type
+# ("image", "text", "code"), content, and an optional label.
 
 _SESSION_DIR = tempfile.mkdtemp(prefix="valid-session-")
-_SESSION_LOG_PATH = os.path.join(_SESSION_DIR, "session.jsonl")
-_session_seq = 0
-_session_screenshot_seq = 0
+_assets: list[dict] = []
+_asset_seq = 0
+_screenshot_seq = 0
 
 
-def _log(tool: str, args: dict, result: str, images: list[str] | None = None):
-    """Append an entry to the session log."""
-    global _session_seq
-    _session_seq += 1
-    entry = {
-        "seq": _session_seq,
+def _next_asset_id() -> str:
+    global _asset_seq
+    _asset_seq += 1
+    return f"asset_{_asset_seq:03d}"
+
+
+def _add_asset(type: str, content: str, label: str = "") -> dict:
+    asset = {
+        "id": _next_asset_id(),
+        "type": type,
+        "label": label,
+        "content": content,
         "ts": time.time(),
-        "tool": tool,
-        "args": args,
-        "result": result[:2000],
-        "images": images or [],
     }
-    with open(_SESSION_LOG_PATH, "a") as f:
-        f.write(json.dumps(entry) + "\n")
+    _assets.append(asset)
+    return asset
 
 
-def _save_screenshot(data: bytes, ext: str = ".png") -> str:
-    """Save screenshot bytes into the session directory, return path."""
-    global _session_screenshot_seq
-    _session_screenshot_seq += 1
-    name = f"screenshot_{_session_screenshot_seq:03d}{ext}"
-    path = os.path.join(_SESSION_DIR, name)
+def _save_screenshot_file(data: bytes, ext: str = ".png") -> str:
+    global _screenshot_seq
+    _screenshot_seq += 1
+    path = os.path.join(_SESSION_DIR, f"screenshot_{_screenshot_seq:03d}{ext}")
     with open(path, "wb") as f:
         f.write(data)
     return path
 
 
-# ── Tools ────────────────────────────────────────────────────────────
+# ── Daemon tools ─────────────────────────────────────────────────────
 
 @mcp.tool()
 async def discover_daemons() -> str:
@@ -65,12 +66,9 @@ async def discover_daemons() -> str:
     registered — in that case, exec runs locally."""
     daemons = registry.discover()
     if not daemons:
-        result = "No remote daemons available. Use exec without a daemon to run commands locally."
-    else:
-        entries = [{"name": d["name"], "url": d["url"]} for d in daemons]
-        result = json.dumps(entries, indent=2)
-    _log("discover_daemons", {}, result)
-    return result
+        return "No remote daemons available. Use exec without a daemon to run commands locally."
+    entries = [{"name": d["name"], "url": d["url"]} for d in daemons]
+    return json.dumps(entries, indent=2)
 
 
 @mcp.tool()
@@ -82,9 +80,7 @@ async def exec(command: str, daemon: str = "") -> str:
     if daemon:
         daemon_map = {d["name"]: d for d in registry.discover()}
         if daemon not in daemon_map:
-            output = f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
-            _log("exec", {"command": command, "daemon": daemon}, output)
-            return output
+            return f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
         d = daemon_map[daemon]
         try:
             resp = requests.post(
@@ -95,9 +91,7 @@ async def exec(command: str, daemon: str = "") -> str:
             )
             result = resp.json()
         except Exception as e:
-            output = f"Error: {e}"
-            _log("exec", {"command": command, "daemon": daemon}, output)
-            return output
+            return f"Error: {e}"
 
         output = ""
         if result.get("stdout"):
@@ -114,13 +108,9 @@ async def exec(command: str, daemon: str = "") -> str:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
         except asyncio.TimeoutError:
-            output = "Error: Command timed out after 30s"
-            _log("exec", {"command": command}, output)
-            return output
+            return "Error: Command timed out after 30s"
         except Exception as e:
-            output = f"Error: {e}"
-            _log("exec", {"command": command}, output)
-            return output
+            return f"Error: {e}"
 
         output = ""
         if stdout:
@@ -129,7 +119,6 @@ async def exec(command: str, daemon: str = "") -> str:
             output += f"STDERR:\n{stderr.decode()}\n"
         output += f"EXIT CODE: {proc.returncode}"
 
-    _log("exec", {"command": command, "daemon": daemon or "(local)"}, output)
     return output
 
 
@@ -139,9 +128,7 @@ async def list_tools(daemon: str) -> str:
     Returns tool names and schemas. Use call_tool to invoke them."""
     daemon_map = {d["name"]: d for d in registry.discover()}
     if daemon not in daemon_map:
-        result = f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
-        _log("list_tools", {"daemon": daemon}, result)
-        return result
+        return f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
     d = daemon_map[daemon]
     try:
         resp = requests.get(
@@ -149,29 +136,24 @@ async def list_tools(daemon: str) -> str:
             headers={"Authorization": f"Bearer {d['token']}"},
             timeout=10,
         )
-        result = resp.text
+        return resp.text
     except Exception as e:
-        result = f"Error: {e}"
-    _log("list_tools", {"daemon": daemon}, result)
-    return result
+        return f"Error: {e}"
 
 
 @mcp.tool()
 async def call_tool(daemon: str, name: str, arguments: str = "{}") -> str:
     """Call a tool on a remote daemon. Use list_tools first to see what's
-    available. Arguments is a JSON string matching the tool's input schema."""
+    available. Arguments is a JSON string matching the tool's input schema.
+    Screenshots are auto-saved as image assets."""
     daemon_map = {d["name"]: d for d in registry.discover()}
     if daemon not in daemon_map:
-        result = f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
-        _log("call_tool", {"daemon": daemon, "name": name}, result)
-        return result
+        return f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
     d = daemon_map[daemon]
     try:
         args = json.loads(arguments)
     except json.JSONDecodeError as e:
-        result = f"Error: Invalid JSON arguments: {e}"
-        _log("call_tool", {"daemon": daemon, "name": name}, result)
-        return result
+        return f"Error: Invalid JSON arguments: {e}"
     try:
         resp = requests.post(
             f"{d['url']}/tools/call",
@@ -181,17 +163,11 @@ async def call_tool(daemon: str, name: str, arguments: str = "{}") -> str:
         )
         result = resp.json()
     except Exception as e:
-        output = f"Error: {e}"
-        _log("call_tool", {"daemon": daemon, "name": name, "arguments": args}, output)
-        return output
+        return f"Error: {e}"
 
     if isinstance(result, dict) and "error" in result:
-        output = f"Error: {result['error']}"
-        _log("call_tool", {"daemon": daemon, "name": name, "arguments": args}, output)
-        return output
+        return f"Error: {result['error']}"
 
-    # Format MCP content array. Images saved into session directory.
-    images = []
     if isinstance(result, dict) and "content" in result:
         parts = []
         for item in result["content"]:
@@ -200,43 +176,48 @@ async def call_tool(daemon: str, name: str, arguments: str = "{}") -> str:
             elif item.get("type") == "image":
                 data = base64.b64decode(item.get("data", ""))
                 ext = ".png" if "png" in item.get("mimeType", "") else ".jpg"
-                path = _save_screenshot(data, ext)
-                images.append(path)
-                parts.append(f"[screenshot saved: {path}]")
+                path = _save_screenshot_file(data, ext)
+                asset = _add_asset("image", path, label=name)
+                parts.append(f"[screenshot saved as {asset['id']}: {path}]")
             else:
                 parts.append(json.dumps(item))
-        output = "\n".join(parts)
-    else:
-        output = json.dumps(result, indent=2)
+        return "\n".join(parts)
 
-    _log("call_tool", {"daemon": daemon, "name": name, "arguments": args}, output, images)
-    return output
+    return json.dumps(result, indent=2)
 
 
-# ── Session log tools ────────────────────────────────────────────────
+# ── Asset tools ──────────────────────────────────────────────────────
 
 @mcp.tool()
-async def session_log() -> str:
-    """Return the full session log — a chronological record of every tool
-    call, its result, and paths to any screenshots. Use this to review
-    what you've done before building the report."""
-    if not os.path.exists(_SESSION_LOG_PATH):
-        return "Session log is empty."
-    with open(_SESSION_LOG_PATH) as f:
-        return f.read()
+async def save_asset(content: str, type: str = "text", label: str = "") -> str:
+    """Save an asset to the session for use in the validation report.
+
+    type:
+      "image" — content is a file path to an image on disk
+      "text"  — prose / narrative content
+      "code"  — log output, command output, code snippets
+
+    Returns the asset ID. Use list_assets to see all saved assets."""
+    asset = _add_asset(type, content, label)
+    return json.dumps({"id": asset["id"], "type": type, "label": label})
 
 
 @mcp.tool()
-async def session_screenshots() -> str:
-    """Return paths to all screenshots taken during this session, in order.
-    Use these paths with valid_add_screenshot when building the report."""
-    shots = sorted(
-        f for f in os.listdir(_SESSION_DIR) if f.endswith((".png", ".jpg"))
-    )
-    if not shots:
-        return "No screenshots taken yet."
-    paths = [os.path.join(_SESSION_DIR, f) for f in shots]
-    return json.dumps(paths, indent=2)
+async def list_assets() -> str:
+    """List all assets saved during this session. Image assets show their
+    file path; text/code assets show a preview. Use these when building
+    the validation report with valid_add_screenshot and valid_add_text."""
+    if not _assets:
+        return "No assets saved yet."
+    summary = []
+    for a in _assets:
+        entry = {"id": a["id"], "type": a["type"], "label": a["label"]}
+        if a["type"] == "image":
+            entry["path"] = a["content"]
+        else:
+            entry["preview"] = a["content"][:200] + ("..." if len(a["content"]) > 200 else "")
+        summary.append(entry)
+    return json.dumps(summary, indent=2)
 
 
 if __name__ == "__main__":
