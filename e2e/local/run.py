@@ -43,7 +43,7 @@ async def main(backend: str = None):
 
     print("=== Deploying locally ===")
     bundle = deploy(compose_dir)
-    print(f"Daemon at {bundle['daemon_url']}")
+    print("Services up.")
 
     try:
         print("\n=== Running validation agent ===")
