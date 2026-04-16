@@ -7,42 +7,43 @@ connects to the sandbox via a Go daemon and runs commands remotely.
 
 ## One-time setup
 
-### 1. Install the E2B CLI and authenticate
+### 1. Get your E2B API key
 
-```bash
-npm install -g @e2b/cli
-e2b auth login
+Copy it from https://e2b.dev/dashboard and add to `.env` at the repo root:
+
+```ini
+E2B_API_KEY=e2b_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ### 2. Build the E2B template
 
-The sandbox needs Docker + compose preinstalled. Build a custom template
-from `e2b.Dockerfile` in this directory:
+The sandbox needs Docker + compose preinstalled. Build the template from
+`e2b.Dockerfile` using the Python SDK:
 
 ```bash
 cd e2e/e2b
-e2b template build
+uv run template.py
 ```
 
-When the build finishes, the CLI prints something like:
+When the build finishes it prints something like:
 
 ```
-✔ Building template finished.
-Template ID:   abcd1234efgh5678
-Template name: valid-docker-compose
+✓ Build complete.
+  template_id:   abcd1234efgh5678
+  template_name: valid-docker-compose
+
+Add this line to ../../.env:
+    E2B_TEMPLATE_ID=abcd1234efgh5678
 ```
 
-### 3. Set up `.env` at the repo root
+### 3. Add the template ID to `.env`
 
-Create (or edit) `.env` in the repo root with:
+Append the line it printed to the repo-root `.env`:
 
 ```ini
 E2B_API_KEY=e2b_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 E2B_TEMPLATE_ID=abcd1234efgh5678
 ```
-
-- **`E2B_API_KEY`** — copy from https://e2b.dev/dashboard
-- **`E2B_TEMPLATE_ID`** — the ID printed by `e2b template build` in step 2
 
 ### 4. Make sure Go is installed
 
@@ -77,10 +78,10 @@ This will:
 ## Troubleshooting
 
 - **`Missing E2B_TEMPLATE_ID`** — finish step 2+3 above.
-- **`dockerd not ready inside sandbox after 60s`** — the `start_cmd` in
-  `e2b.toml` needs to launch dockerd at boot. If you hand-edited the
-  template or skipped rebuilding after a change, run `e2b template build`
-  again.
+- **`dockerd not ready inside sandbox after 60s`** — the `set_start_cmd`
+  in `template.py` launches dockerd at boot. If you changed the Dockerfile
+  or that command, re-run `uv run template.py` and update
+  `E2B_TEMPLATE_ID` in `.env` with the new ID.
 - **`docker compose up failed`** — check the printed logs. The most common
   cause is your `app/Dockerfile` failing to build. Test it locally first:
   `cd ../local && docker compose up --build`.

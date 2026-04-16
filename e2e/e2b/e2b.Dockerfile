@@ -28,8 +28,6 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
         docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
 
-# Start dockerd at sandbox boot.
-RUN echo '#!/bin/sh\nnohup dockerd > /var/log/dockerd.log 2>&1 &\n' > /usr/local/bin/start-docker.sh \
-    && chmod +x /usr/local/bin/start-docker.sh
-
 WORKDIR /app
+
+# dockerd is started by the sandbox `start_cmd` (see template.py), not here.
