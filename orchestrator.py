@@ -133,32 +133,46 @@ async def _validate_cli(
         "--mcp-config", mcp_config_path,
         "--allowedTools", allowed,
         "--max-turns", str(MAX_TURNS),
-        "--output-format", "json",
+        "--output-format", "stream-json",
     ]
 
     try:
-        print(f"Running: claude -p ... --mcp-config {mcp_config_path}")
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
-            text=True,
-            timeout=600,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
+            text=True,
         )
 
-        if proc.stderr:
-            print(f"Claude Code stderr: {proc.stderr[:500]}")
+        result_text = ""
+        # Stream stdout line by line — each line is a JSON event
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            etype = event.get("type")
+            if etype == "assistant":
+                # Print assistant text as it streams
+                msg = event.get("message", {})
+                for block in msg.get("content", []):
+                    if block.get("type") == "text":
+                        print(block["text"])
+            elif etype == "result":
+                result_text = event.get("result", "")
+
+        proc.wait(timeout=30)
 
         if proc.returncode != 0:
-            return {"status": "unknown", "reason": proc.stderr, "report_path": None}
-
-        if not proc.stdout.strip():
-            return {"status": "unknown", "reason": "Claude Code returned empty output", "report_path": None}
-
-        result = json.loads(proc.stdout)
-        result_text = result.get("result", "")
-
-        print(f"Claude Code result: {result_text[:500]}")
+            stderr = proc.stderr.read()
+            if stderr:
+                print(f"Claude Code stderr: {stderr[:500]}")
+            return {"status": "unknown", "reason": stderr, "report_path": None}
 
         # The agent's final message should be JSON
         try:
@@ -166,13 +180,13 @@ async def _validate_cli(
         except (json.JSONDecodeError, TypeError):
             return {"status": "unknown", "reason": str(result_text), "report_path": None}
 
-    except subprocess.TimeoutExpired:
-        return {"status": "unknown", "reason": "Claude Code timed out after 600s", "report_path": None}
     except FileNotFoundError:
         raise RuntimeError(
             "claude CLI not found. Install Claude Code: https://docs.anthropic.com/en/docs/claude-code"
         )
     finally:
+        if proc.poll() is None:
+            proc.kill()
         os.unlink(mcp_config_path)
         os.unlink(prompt_path)
 
