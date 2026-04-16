@@ -36,7 +36,14 @@ def main():
     # as a systemd service that auto-starts at sandbox boot. deploy.py polls
     # for readiness and can fall back to `sudo service docker start` if
     # dockerd isn't up yet.
-    template = Template().from_dockerfile(DOCKERFILE)
+    #
+    # Strip comments so e2b's Dockerfile parser doesn't print
+    # "Unsupported instruction: COMMENT" for every `#` line.
+    with open(DOCKERFILE) as f:
+        dockerfile_content = "\n".join(
+            line for line in f.read().splitlines() if not line.lstrip().startswith("#")
+        )
+    template = Template().from_dockerfile(dockerfile_content)
 
     print(f"Building template '{TEMPLATE_NAME}' (2 CPU, 2 GB RAM)...")
     info = Template.build(
