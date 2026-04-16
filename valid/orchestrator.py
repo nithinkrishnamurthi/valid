@@ -26,6 +26,8 @@ You can ONLY observe and report. You cannot modify code.
 You have access to:
 - discover_daemons: list available remote machines you can execute commands on
 - exec: run a bash command (locally, or on a remote daemon by name)
+- list_tools: discover additional tools hosted on a remote daemon
+- call_tool: call a daemon-hosted tool by name and arguments (JSON string)
 - valid_create, valid_add_text, valid_add_screenshot, valid_render: build a visual QA report
 
 TASK THAT WAS IMPLEMENTED:
@@ -41,19 +43,23 @@ INSTRUCTIONS:
 1. Call discover_daemons to see what machines are available.
    - If daemons are listed, use exec with the daemon name to run commands remotely.
    - If no daemons are available, use exec to run commands on your local machine.
-2. Check what services are running (e.g. docker compose ps)
-3. Check for errors in logs (e.g. docker compose logs --tail=50)
-4. Based on the diff and implementation summary, test the changed functionality:
+2. Call list_tools on each daemon to discover what additional tools are available
+   (e.g. browser automation). Use call_tool to invoke them.
+3. Check what services are running (e.g. docker compose ps)
+4. Check for errors in logs (e.g. docker compose logs --tail=50)
+5. Based on the diff and implementation summary, test the changed functionality:
    - Curl endpoints
    - Query the database
    - Check service health
-5. Build a validation report using the valid tools:
+   - If browser tools are available, use them for visual verification.
+     Screenshots from call_tool are saved to local temp files — use with valid_add_screenshot.
+6. Build a validation report using the valid tools:
    - valid_create with a title describing what was validated
    - Use valid_add_text with format="prose" to narrate what you did and what you observed.
      Prose supports **bold**, *italic*, lists, and other markdown formatting.
    - Use valid_add_text with format="code" for log excerpts and command output
    - valid_render to produce the final PNG
-6. Your report should tell a clear story: what you tested, what you observed, what worked,
+7. Your report should tell a clear story: what you tested, what you observed, what worked,
    what didn't. Be specific — include endpoint URLs, status codes, relevant log lines.
 
 Your final message MUST be valid JSON in this format:

@@ -34,6 +34,16 @@ DAEMON_PORT = 9090
 POLL_INTERVAL = 3
 HEALTH_TIMEOUT = 120
 DOCKER_READY_TIMEOUT = 60
+MCP_CONFIG_PATH = "/home/user/mcp-config.json"
+
+MCP_CONFIG = {
+    "mcpServers": {
+        "playwright": {
+            "command": "npx",
+            "args": ["-y", "@playwright/mcp", "--headless"],
+        }
+    }
+}
 
 
 def _require_env(name: str) -> str:
@@ -197,11 +207,16 @@ def deploy(
             sbx.files.write("/tmp/daemon", f.read())
         sbx.commands.run("sudo install -m 0755 /tmp/daemon /usr/local/bin/daemon", timeout=5)
 
+        print("Uploading MCP config...")
+        sbx.files.write(MCP_CONFIG_PATH, json.dumps(MCP_CONFIG).encode())
+
         print("Starting daemon...")
         # Run as root so the validation agent's `exec` calls can talk to
-        # the docker socket without also needing sudo.
+        # the docker socket without also needing sudo. Playwright detects
+        # root and adds --no-sandbox to Chromium automatically.
         sbx.commands.run(
-            f"sudo -b env DAEMON_TOKEN={token} /usr/local/bin/daemon --port {DAEMON_PORT} "
+            f"sudo -b env DAEMON_TOKEN={token} /usr/local/bin/daemon "
+            f"--port {DAEMON_PORT} --mcp-config {MCP_CONFIG_PATH} "
             f"> /tmp/daemon.log 2>&1",
             timeout=5,
         )
