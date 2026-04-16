@@ -1,21 +1,17 @@
 """
 Standalone MCP server exposing discover_daemons + exec tools.
 
-Used by both the Agent SDK backend and Claude Code CLI backend.
-Run directly for stdio transport: python validation_tools_server.py
+Used by both the Agent SDK backend and Claude Code CLI backend via stdio:
+    python -m valid.tools_server
 """
 
-import os
-import sys
 import json
 import asyncio
 
 import requests
 from mcp.server.fastmcp import FastMCP
 
-# Ensure registry is importable
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import registry
+from valid import registry
 
 mcp = FastMCP("validation-tools")
 

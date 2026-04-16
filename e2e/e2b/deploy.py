@@ -10,7 +10,7 @@ from e2b_code_interpreter import Sandbox
 load_dotenv()
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-import registry
+from valid import registry
 
 
 DAEMON_PORT = 9090

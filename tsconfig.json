@@ -5,11 +5,11 @@
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "strict": true,
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "valid-mcp/dist",
+    "rootDir": "valid-mcp/src",
     "declaration": true,
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": ["valid-mcp/src"]
 }

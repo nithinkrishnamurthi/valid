@@ -22,7 +22,7 @@ import anyio
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from deploy import deploy, redeploy, teardown
-from orchestrator import validate
+from valid import validate
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 APP_DIR = os.path.join(HERE, "app")

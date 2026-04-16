@@ -1,5 +1,7 @@
 node_modules/
-dist/
+valid-mcp/dist/
 .valid/
 .venv/
 .env
+__pycache__/
+*.egg-info/
