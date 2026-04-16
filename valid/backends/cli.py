@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-from valid.orchestrator import MAX_TURNS, build_prompt
+from valid.agent import MAX_TURNS, build_prompt
 
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

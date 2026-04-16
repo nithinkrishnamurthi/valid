@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 from typing import Awaitable, Callable
 
-from valid.orchestrator import validate
+from valid.agent import validate
 
 
 CODING_SYSTEM_PROMPT = """\
