@@ -2,6 +2,10 @@
 Validation orchestrator — runs a read-only validation agent against a
 deployed environment, returns verdict + report.
 
+Supports two backends:
+  - "cli": launches Claude Code headlessly (supports OAuth token or API key)
+  - "sdk": uses the Claude Agent SDK (requires ANTHROPIC_API_KEY)
+
 Daemons are discovered via the filesystem registry (see registry.py).
 Deploy scripts register daemons after startup; the validation agent
 discovers them automatically. If no daemons are registered, the agent
@@ -12,23 +16,11 @@ Deploy is pluggable: see e2e/local/ and e2e/e2b/ for examples.
 
 import os
 import json
-import asyncio
-import anyio
-import requests
-
-import registry
-from claude_agent_sdk import (
-    tool,
-    create_sdk_mcp_server,
-    ClaudeSDKClient,
-    ClaudeAgentOptions,
-    AssistantMessage,
-    ResultMessage,
-    TextBlock,
-)
-
+import subprocess
+import tempfile
 
 VALID_SERVER_PATH = os.path.join(os.path.dirname(__file__), "dist", "index.js")
+VALIDATION_TOOLS_SERVER = os.path.join(os.path.dirname(__file__), "validation_tools_server.py")
 
 MAX_TURNS = 50
 
@@ -75,9 +67,122 @@ Your final message MUST be valid JSON in this format:
 """
 
 
-def _make_tools():
-    """Create discover_daemons + exec tools for the validation agent."""
+def _build_prompt(task: str, implementation_summary: str, diff: str) -> str:
+    return SYSTEM_PROMPT.format(
+        task=task,
+        implementation_summary=implementation_summary,
+        diff=diff,
+    )
 
+
+def _mcp_config() -> dict:
+    """MCP server config used by both backends."""
+    return {
+        "mcpServers": {
+            "validation": {
+                "command": "python",
+                "args": [VALIDATION_TOOLS_SERVER],
+            },
+            "valid": {
+                "command": "node",
+                "args": [VALID_SERVER_PATH],
+            },
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# CLI backend — launches Claude Code headlessly
+# ---------------------------------------------------------------------------
+
+async def _validate_cli(
+    task: str,
+    implementation_summary: str,
+    diff: str,
+) -> dict:
+    prompt = _build_prompt(task, implementation_summary, diff)
+    mcp_conf = _mcp_config()
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, prefix="valid-mcp-"
+    ) as f:
+        json.dump(mcp_conf, f)
+        mcp_config_path = f.name
+
+    allowed = [
+        "mcp__validation__discover_daemons",
+        "mcp__validation__exec",
+        "mcp__valid__valid_create",
+        "mcp__valid__valid_add_screenshot",
+        "mcp__valid__valid_add_text",
+        "mcp__valid__valid_render",
+    ]
+
+    cmd = [
+        "claude",
+        "-p", "Begin validation.",
+        "--system-prompt", prompt,
+        "--mcp-config", mcp_config_path,
+        "--allowedTools", json.dumps(allowed),
+        "--max-turns", str(MAX_TURNS),
+        "--output-format", "json",
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+
+        if proc.returncode != 0:
+            print(f"Claude Code stderr: {proc.stderr}")
+            return {"status": "unknown", "reason": proc.stderr, "report_path": None}
+
+        result = json.loads(proc.stdout)
+        # Claude Code JSON output has a "result" field with the final text
+        result_text = result.get("result", proc.stdout)
+
+        # The agent's final message should be JSON
+        try:
+            return json.loads(result_text)
+        except (json.JSONDecodeError, TypeError):
+            return {"status": "unknown", "reason": str(result_text), "report_path": None}
+
+    except subprocess.TimeoutExpired:
+        return {"status": "unknown", "reason": "Claude Code timed out after 600s", "report_path": None}
+    except FileNotFoundError:
+        raise RuntimeError(
+            "claude CLI not found. Install Claude Code: https://docs.anthropic.com/en/docs/claude-code"
+        )
+    finally:
+        os.unlink(mcp_config_path)
+
+
+# ---------------------------------------------------------------------------
+# SDK backend — uses Claude Agent SDK directly
+# ---------------------------------------------------------------------------
+
+async def _validate_sdk(
+    task: str,
+    implementation_summary: str,
+    diff: str,
+) -> dict:
+    import asyncio
+    import registry
+    import requests
+    from claude_agent_sdk import (
+        tool,
+        create_sdk_mcp_server,
+        ClaudeSDKClient,
+        ClaudeAgentOptions,
+        AssistantMessage,
+        ResultMessage,
+        TextBlock,
+    )
+
+    # Define tools inline for the SDK (can't share the MCP server module)
     @tool(
         "discover_daemons",
         "List available remote machines. Each entry has a name you can pass "
@@ -106,7 +211,6 @@ def _make_tools():
         daemon_name = args.get("daemon")
 
         if daemon_name:
-            # Remote execution via daemon — look up from registry
             daemon_map = {d["name"]: d for d in registry.discover()}
             if daemon_name not in daemon_map:
                 return {
@@ -132,7 +236,6 @@ def _make_tools():
                 output += f"STDERR:\n{result['stderr']}\n"
             output += f"EXIT CODE: {result.get('exit_code', -1)}"
         else:
-            # Local execution
             try:
                 proc = await asyncio.create_subprocess_shell(
                     command,
@@ -154,39 +257,11 @@ def _make_tools():
 
         return {"content": [{"type": "text", "text": output}]}
 
-    return [discover_daemons_tool, exec_tool]
-
-
-async def validate(
-    task: str,
-    implementation_summary: str,
-    diff: str,
-) -> dict:
-    """
-    Run the validation agent against an already-deployed environment.
-
-    The caller is responsible for deploying, redeploying, and tearing down.
-    This function only runs the validation agent and returns the verdict.
-
-    Daemons are discovered automatically from the registry. Deploy scripts
-    should call registry.register() before invoking validate().
-
-    Args:
-        task: What was supposed to be implemented.
-        implementation_summary: Structured list of what the coding agent did.
-        diff: Git diff of changes.
-
-    Returns:
-        {"status": "pass"|"fail", "report_path": "...", "reason": "..."}
-    """
-    custom_tools = _make_tools()
-    custom_server = create_sdk_mcp_server("validation-tools", tools=custom_tools)
-
-    prompt = SYSTEM_PROMPT.format(
-        task=task,
-        implementation_summary=implementation_summary,
-        diff=diff,
+    custom_server = create_sdk_mcp_server(
+        "validation-tools", tools=[discover_daemons_tool, exec_tool]
     )
+
+    prompt = _build_prompt(task, implementation_summary, diff)
 
     options = ClaudeAgentOptions(
         allowed_tools=[],
@@ -213,3 +288,60 @@ async def validate(
         return json.loads(result_text)
     except json.JSONDecodeError:
         return {"status": "unknown", "reason": result_text, "report_path": None}
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+async def validate(
+    task: str,
+    implementation_summary: str,
+    diff: str,
+    backend: str = None,
+) -> dict:
+    """
+    Run the validation agent against an already-deployed environment.
+
+    Args:
+        task: What was supposed to be implemented.
+        implementation_summary: Structured list of what the coding agent did.
+        diff: Git diff of changes.
+        backend: "cli" for Claude Code, "sdk" for Agent SDK.
+                 If None, auto-selects: "cli" if `claude` is on PATH,
+                 falls back to "sdk" if ANTHROPIC_API_KEY is set.
+
+    Returns:
+        {"status": "pass"|"fail", "report_path": "...", "reason": "..."}
+    """
+    if backend is None:
+        backend = _detect_backend()
+
+    if backend == "cli":
+        return await _validate_cli(task, implementation_summary, diff)
+    elif backend == "sdk":
+        return await _validate_sdk(task, implementation_summary, diff)
+    else:
+        raise ValueError(f"Unknown backend: {backend!r}. Use 'cli' or 'sdk'.")
+
+
+def _detect_backend() -> str:
+    """Auto-detect which backend to use."""
+    # Prefer CLI if claude is available
+    try:
+        subprocess.run(
+            ["claude", "--version"],
+            capture_output=True,
+            timeout=5,
+        )
+        return "cli"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "sdk"
+
+    raise RuntimeError(
+        "No backend available. Either install Claude Code (for OAuth/CLI) "
+        "or set ANTHROPIC_API_KEY (for Agent SDK)."
+    )

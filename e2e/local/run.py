@@ -4,9 +4,12 @@ starts the daemon locally, runs the validation agent.
 
 Usage:
     cd e2e/local
-    python run.py
+    python run.py              # auto-detect backend
+    python run.py --backend cli   # force Claude Code CLI
+    python run.py --backend sdk   # force Agent SDK
 """
 
+import argparse
 import os
 import sys
 import anyio
@@ -35,7 +38,7 @@ DIFF = """\
 """
 
 
-async def main():
+async def main(backend: str = None):
     compose_dir = os.path.dirname(os.path.abspath(__file__))
 
     print("=== Deploying locally ===")
@@ -48,6 +51,7 @@ async def main():
             task=TASK,
             implementation_summary=IMPLEMENTATION_SUMMARY,
             diff=DIFF,
+            backend=backend,
         )
 
         print(f"\n{'=' * 60}")
@@ -61,4 +65,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    anyio.run(main)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--backend", choices=["cli", "sdk"], default=None)
+    args = parser.parse_args()
+    anyio.run(main, args.backend)
