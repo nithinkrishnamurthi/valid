@@ -36,10 +36,13 @@ def main():
         Template()
         .from_dockerfile(DOCKERFILE)
         .set_start_cmd(
-            # Launch dockerd in the background at sandbox boot.
-            "nohup dockerd > /var/log/dockerd.log 2>&1 &",
-            # Ready when the Docker daemon responds.
-            "docker info",
+            # Launch dockerd as the sandbox's long-running init process.
+            # Runs as `user` (E2B default), so sudo to elevate. Foreground —
+            # the sandbox treats start_cmd as PID 1 of the process tree.
+            "sudo dockerd",
+            # Ready when the daemon responds. sudo so the check doesn't
+            # depend on the user's group membership being active yet.
+            "sudo docker info",
         )
     )
 

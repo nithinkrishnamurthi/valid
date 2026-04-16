@@ -1,33 +1,23 @@
 FROM ubuntu:22.04
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    curl \
-    gnupg \
-    git \
+# Install Docker + compose via the official convenience script, plus
+# a few extras we need.
+# E2B sandboxes are Firecracker microVMs, so dockerd runs natively
+# inside — no DinD / nested virt needed.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates curl git sudo \
+    && curl -fsSL https://get.docker.com | sh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker (Docker Engine + Compose v2 plugin).
-# E2B sandboxes are Firecracker microVMs, so the Docker daemon runs
-# natively inside — no DinD / nested virt needed.
-RUN install -m 0755 -d /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
-    chmod a+r /etc/apt/keyrings/docker.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-        https://download.docker.com/linux/ubuntu jammy stable" \
-        > /etc/apt/sources.list.d/docker.list && \
-    apt-get update && \
-    apt-get install -y \
-        docker-ce \
-        docker-ce-cli \
-        containerd.io \
-        docker-buildx-plugin \
-        docker-compose-plugin && \
-    rm -rf /var/lib/apt/lists/*
+# E2B's default sandbox user is "user" (not root). Add it to the docker
+# group so it can talk to dockerd's socket without sudo.
+RUN usermod -aG docker user 2>/dev/null || true
 
-WORKDIR /app
+# Workdir for the deployed app. Owned by `user` so tar extract + compose
+# don't need sudo for file ops.
+RUN mkdir -p /home/user/app && chown user:user /home/user/app
+WORKDIR /home/user/app
 
-# dockerd is started by the sandbox `start_cmd` (see template.py), not here.
+# dockerd is launched by `set_start_cmd` in template.py (runtime config),
+# not at image-build time.

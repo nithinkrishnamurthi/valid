@@ -1,5 +1,5 @@
 """E2B deploy — spins up a sandbox from a custom Docker-enabled template,
-uploads the app, runs docker compose, and starts the exec daemon.
+uploads the app, runs sudo docker compose, and starts the exec daemon.
 
 Requires (in the repo-root .env):
     E2B_API_KEY=...              # from https://e2b.dev/dashboard
@@ -70,7 +70,7 @@ def _wait_for_docker(sbx: Sandbox, timeout: int = DOCKER_READY_TIMEOUT) -> None:
     """Block until `docker info` succeeds inside the sandbox."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        r = sbx.commands.run("docker info", timeout=5)
+        r = sbx.commands.run("sudo docker info", timeout=5)
         if r.exit_code == 0:
             return
         time.sleep(2)
@@ -78,9 +78,9 @@ def _wait_for_docker(sbx: Sandbox, timeout: int = DOCKER_READY_TIMEOUT) -> None:
 
 
 def _all_healthy(sbx: Sandbox, compose_file: str) -> bool:
-    """Parse `docker compose ps --format json` and check all services are healthy."""
+    """Parse `sudo docker compose ps --format json` and check all services are healthy."""
     r = sbx.commands.run(
-        f"cd /app && docker compose -f {compose_file} ps --format json",
+        f"cd /home/user/app && sudo docker compose -f {compose_file} ps --format json",
         timeout=10,
     )
     if r.exit_code != 0:
@@ -103,8 +103,8 @@ def deploy(
     1. Build daemon for linux/amd64
     2. Create an E2B sandbox from the custom template
     3. Wait for dockerd to be ready
-    4. Upload the compose_dir as a tarball, extract to /app
-    5. docker compose up
+    4. Upload the compose_dir as a tarball, extract to /home/user/app
+    5. sudo docker compose up
     6. Upload & start the daemon
     7. Register with the daemon registry
     """
@@ -125,11 +125,16 @@ def deploy(
         print("Uploading app...")
         tarball = _tarball(compose_dir, arcname="app")
         sbx.files.write("/tmp/app.tar.gz", tarball)
-        sbx.commands.run("mkdir -p /app && tar -xzf /tmp/app.tar.gz -C /tmp && cp -r /tmp/app/. /app/", timeout=30)
+        # Extract into /tmp/app, then copy contents into /home/user/app
+        # (which is owned by `user` per the template Dockerfile).
+        sbx.commands.run(
+            "tar -xzf /tmp/app.tar.gz -C /tmp && cp -r /tmp/app/. /home/user/app/",
+            timeout=30,
+        )
 
         print("Running docker compose up...")
         r = sbx.commands.run(
-            f"cd /app && docker compose -f {compose_file} up -d --build",
+            f"cd /home/user/app && sudo docker compose -f {compose_file} up -d --build",
             timeout=300,
         )
         if r.exit_code != 0:
@@ -143,7 +148,7 @@ def deploy(
             time.sleep(POLL_INTERVAL)
         else:
             logs = sbx.commands.run(
-                f"cd /app && docker compose -f {compose_file} logs --tail=50",
+                f"cd /home/user/app && sudo docker compose -f {compose_file} logs --tail=50",
                 timeout=10,
             )
             raise TimeoutError(
@@ -151,13 +156,17 @@ def deploy(
             )
 
         print("Uploading daemon binary...")
+        # Write to /tmp (writable by `user`), then sudo-install to /usr/local/bin.
         with open(daemon_bin, "rb") as f:
-            sbx.files.write("/usr/local/bin/daemon", f.read())
-        sbx.commands.run("chmod +x /usr/local/bin/daemon")
+            sbx.files.write("/tmp/daemon", f.read())
+        sbx.commands.run("sudo install -m 0755 /tmp/daemon /usr/local/bin/daemon", timeout=5)
 
         print("Starting daemon...")
+        # Run as root so the validation agent's `exec` calls can talk to
+        # the docker socket without also needing sudo.
         sbx.commands.run(
-            f"DAEMON_TOKEN={token} nohup /usr/local/bin/daemon --port {DAEMON_PORT} > /tmp/daemon.log 2>&1 &",
+            f"sudo -b env DAEMON_TOKEN={token} /usr/local/bin/daemon --port {DAEMON_PORT} "
+            f"> /tmp/daemon.log 2>&1",
             timeout=5,
         )
         time.sleep(2)
@@ -192,12 +201,16 @@ def redeploy(bundle: dict) -> None:
     print("Re-uploading app with changes...")
     tarball = _tarball(compose_dir, arcname="app")
     sbx.files.write("/tmp/app.tar.gz", tarball)
-    sbx.commands.run("rm -rf /app/* && tar -xzf /tmp/app.tar.gz -C /tmp && cp -r /tmp/app/. /app/", timeout=30)
+    sbx.commands.run(
+        "rm -rf /home/user/app/* && tar -xzf /tmp/app.tar.gz -C /tmp && "
+        "cp -r /tmp/app/. /home/user/app/",
+        timeout=30,
+    )
 
     print("Restarting services...")
-    sbx.commands.run(f"cd /app && docker compose -f {compose_file} down", timeout=60)
+    sbx.commands.run(f"cd /home/user/app && sudo docker compose -f {compose_file} down", timeout=60)
     r = sbx.commands.run(
-        f"cd /app && docker compose -f {compose_file} up -d --build",
+        f"cd /home/user/app && sudo docker compose -f {compose_file} up -d --build",
         timeout=300,
     )
     if r.exit_code != 0:
