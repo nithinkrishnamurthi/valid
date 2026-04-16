@@ -220,11 +220,29 @@ def deploy(
             f"> /tmp/daemon.log 2>&1",
             timeout=5,
         )
-        time.sleep(2)
-        r = sbx.commands.run(f"curl -s http://localhost:{DAEMON_PORT}/health", timeout=5)
-        if r.exit_code != 0 or "ok" not in r.stdout:
+
+        # Poll for daemon readiness — MCP server handshake (Playwright)
+        # can take several seconds on first boot.
+        print("Waiting for daemon to be ready...")
+        daemon_deadline = time.time() + 30
+        daemon_up = False
+        while time.time() < daemon_deadline:
+            try:
+                r = sbx.commands.run(
+                    f"curl -s http://localhost:{DAEMON_PORT}/health", timeout=5,
+                )
+                if r.exit_code == 0 and "ok" in r.stdout:
+                    daemon_up = True
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+        if not daemon_up:
             daemon_log = sbx.commands.run("cat /tmp/daemon.log", timeout=5)
-            raise RuntimeError(f"Daemon failed to start: {daemon_log.stdout}")
+            raise RuntimeError(
+                f"Daemon failed to start after 30s.\n"
+                f"Daemon log:\n{daemon_log.stdout}\n{daemon_log.stderr}"
+            )
 
         daemon_url = f"https://{sbx.get_host(DAEMON_PORT)}"
         daemon_name = f"e2b-{sbx.sandbox_id}"
