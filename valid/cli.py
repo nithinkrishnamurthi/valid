@@ -1,8 +1,7 @@
 """CLI entry point for valid.
 
-Usage:
-    valid run --provider e2b --token SECRET --task ticket.md --diff "$(git diff main)"
-    valid run --provider local --task ticket.md --diff "$(git diff main)"
+Reads valid.yml from the current directory for project config, then:
+    valid run --provider e2b --diff "$(git diff main)"
 """
 
 import json
@@ -15,6 +14,17 @@ import click
 from valid import __version__
 
 
+def _load_config() -> dict:
+    """Load valid.yml from the current directory."""
+    for name in ("valid.yml", "valid.yaml"):
+        path = os.path.join(os.getcwd(), name)
+        if os.path.exists(path):
+            import yaml  # lazy — only needed if config exists
+            with open(path) as f:
+                return yaml.safe_load(f) or {}
+    return {}
+
+
 @click.group()
 @click.version_option(__version__)
 def main():
@@ -23,49 +33,34 @@ def main():
 
 
 @main.command()
-@click.option(
-    "--provider",
-    type=click.Choice(["e2b", "local"]),
-    required=True,
-    help="Deploy provider.",
-)
-@click.option(
-    "--token",
-    default=None,
-    help="Shared secret for daemon auth. Auto-generated if omitted.",
-)
-@click.option(
-    "--task",
-    required=True,
-    type=click.Path(exists=True),
-    help="Path to task/ticket markdown file.",
-)
-@click.option(
-    "--diff",
-    required=True,
-    help="Git diff of changes to validate.",
-)
-@click.option(
-    "--e2b-api-key",
-    envvar="E2B_API_KEY",
-    default=None,
-    help="E2B API key (required for e2b provider). Also reads E2B_API_KEY env var.",
-)
-@click.option(
-    "--backend",
-    type=click.Choice(["cli", "sdk"]),
-    default=None,
-    help="Validation agent backend. Auto-detected if omitted.",
-)
-@click.option(
-    "--compose-file",
-    default="docker-compose.yml",
-    help="Docker Compose file name.",
-)
-def run(provider, token, task, diff, e2b_api_key, backend, compose_file):
-    """Deploy, validate, and teardown in one shot."""
+@click.option("--task", required=True, type=click.Path(exists=True), help="Path to task/ticket file.")
+@click.option("--diff", required=True, help="Git diff of changes to validate.")
+@click.option("--token", default=None, help="Shared secret for daemon auth. Auto-generated if omitted.")
+@click.option("--e2b-api-key", envvar="E2B_API_KEY", default=None, help="E2B API key.")
+@click.option("--backend", type=click.Choice(["cli", "sdk"]), default=None, help="Validation agent backend.")
+def run(task, diff, token, e2b_api_key, backend):
+    """Deploy, validate, and teardown in one shot.
+
+    Reads valid.yml from the current directory for build/deploy config:
+
+    \b
+        compose: docker-compose.yml
+        provider: e2b
+    """
     import uuid
     from valid.agent import validate
+
+    config = _load_config()
+    if not config:
+        click.echo("Error: valid.yml not found in current directory.", err=True)
+        sys.exit(1)
+
+    provider = config.get("provider")
+    compose_file = config.get("compose", "docker-compose.yml")
+
+    if not provider:
+        click.echo("Error: 'provider' is required in valid.yml.", err=True)
+        sys.exit(1)
 
     with open(task) as f:
         task_text = f.read()
@@ -76,6 +71,7 @@ def run(provider, token, task, diff, e2b_api_key, backend, compose_file):
         token = f"eph_{uuid.uuid4().hex[:16]}"
 
     if provider == "e2b":
+        e2b_api_key = e2b_api_key or config.get("e2b_api_key")
         if not e2b_api_key:
             click.echo("Error: --e2b-api-key or E2B_API_KEY env var required for e2b provider.", err=True)
             sys.exit(1)
@@ -89,6 +85,9 @@ def run(provider, token, task, diff, e2b_api_key, backend, compose_file):
     elif provider == "local":
         from valid.providers.local import LocalProvider
         prov = LocalProvider(compose_dir=compose_dir, compose_file=compose_file)
+    else:
+        click.echo(f"Error: unknown provider '{provider}' in valid.yml.", err=True)
+        sys.exit(1)
 
     async def _run():
         daemon_url, daemon_token = prov.deploy()
