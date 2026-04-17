@@ -67,6 +67,31 @@ class LocalProvider:
 
         return None, None
 
+    def redeploy(self, compose_dir: str) -> None:
+        """Restart services after code changes."""
+        subprocess.run(
+            ["docker", "compose", "-f", self.compose_file, "down"],
+            cwd=compose_dir,
+            capture_output=True,
+        )
+        up = subprocess.run(
+            ["docker", "compose", "-f", self.compose_file, "up", "-d", "--build"],
+            cwd=compose_dir,
+            capture_output=True,
+            text=True,
+        )
+        if up.returncode != 0:
+            raise RuntimeError(
+                f"docker compose up failed on redeploy:\n{up.stdout}\n{up.stderr}"
+            )
+
+        deadline = time.time() + HEALTH_TIMEOUT
+        while time.time() < deadline:
+            if _all_healthy(compose_dir, self.compose_file):
+                return
+            time.sleep(POLL_INTERVAL)
+        raise TimeoutError(f"Services not healthy after {HEALTH_TIMEOUT}s on redeploy")
+
     def teardown(self) -> None:
         subprocess.run(
             ["docker", "compose", "-f", self.compose_file, "down"],

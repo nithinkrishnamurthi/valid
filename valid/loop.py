@@ -124,16 +124,8 @@ async def run_loop(
     """
     Run the full closed-loop: coding agent → deploy → validate → fix → repeat.
 
-    Args:
-        app_dir: Directory the coding agent is allowed to modify.
-        ticket_path: File containing the task description.
-        deploy_fn: Callable producing a deploy bundle. First call deploys from
-                   scratch; subsequent attempts call redeploy_fn.
-        redeploy_fn: Callable to restart services after code changes.
-        teardown_fn: Callable to clean up the deployment.
-
-    Returns:
-        Final verdict dict from the last validation attempt.
+    deploy_fn should return a dict with optional "daemon_url" and "daemon_token"
+    keys. These are passed to the validation agent automatically.
     """
     with open(ticket_path) as f:
         ticket = f.read()
@@ -180,12 +172,18 @@ async def run_loop(
                 redeploy_fn(bundle)
                 print("Services restarted.")
 
+            # Pull daemon params from bundle if available
+            _url = bundle.get("daemon_url") if isinstance(bundle, dict) else None
+            _token = bundle.get("daemon_token") if isinstance(bundle, dict) else None
+
             print("\n--- Validation agent ---")
             verdict = await validate(
                 task=ticket,
                 implementation_summary=summary,
                 diff=diff,
                 backend=backend,
+                daemon_url=_url,
+                daemon_token=_token,
             )
 
             status = verdict.get("status", "unknown")
