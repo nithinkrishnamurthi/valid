@@ -53,17 +53,14 @@ def _require_config(config_path: str = None) -> tuple[dict, str]:
     if not config:
         click.echo("Error: valid.yml not found. Use --config or run from a directory with valid.yml.", err=True)
         sys.exit(1)
-    if not config.get("provider"):
-        click.echo("Error: 'provider' is required in valid.yml.", err=True)
-        sys.exit(1)
     return config, config_dir
 
 
-def _make_provider(config: dict, config_dir: str, token: str = None, e2b_api_key: str = None):
+def _make_provider(config: dict, config_dir: str, token: str = None, e2b_api_key: str = None, provider_override: str = None):
     """Instantiate the deploy provider from config. Paths resolve relative to config_dir."""
     import uuid
 
-    provider = config["provider"]
+    provider = provider_override or config.get("provider", "local")
     compose_dir = config_dir
     compose_file = config.get("compose", "docker-compose.yml")
 
@@ -99,17 +96,18 @@ def main():
 
 @main.command()
 @click.option("--config", "config_path", default=None, type=click.Path(exists=True), help="Path to valid.yml.")
+@click.option("--provider", default=None, type=click.Choice(["e2b", "local"]), help="Deploy provider. Overrides valid.yml. Default: local.")
 @click.option("--task", required=True, type=click.Path(exists=True), help="Path to task/ticket file.")
 @click.option("--diff", required=True, help="Git diff of changes to validate.")
 @click.option("--token", default=None, help="Shared secret for daemon auth. Auto-generated if omitted.")
 @click.option("--e2b-api-key", envvar="E2B_API_KEY", default=None, help="E2B API key.")
 @click.option("--backend", type=click.Choice(["cli", "sdk"]), default=None, help="Validation agent backend.")
-def run(config_path, task, diff, token, e2b_api_key, backend):
+def run(config_path, provider, task, diff, token, e2b_api_key, backend):
     """Validate an existing diff. Deploy, run validation agent, teardown."""
     from valid.agent import validate
 
     config, config_dir = _require_config(config_path)
-    prov = _make_provider(config, config_dir, token, e2b_api_key)
+    prov = _make_provider(config, config_dir, token, e2b_api_key, provider)
 
     with open(task) as f:
         task_text = f.read()
@@ -136,6 +134,7 @@ def run(config_path, task, diff, token, e2b_api_key, backend):
 
 @main.command()
 @click.option("--config", "config_path", default=None, type=click.Path(exists=True), help="Path to valid.yml.")
+@click.option("--provider", default=None, type=click.Choice(["e2b", "local"]), help="Deploy provider. Overrides valid.yml. Default: local.")
 @click.option("--task", required=True, type=click.Path(exists=True), help="Path to task/ticket file.")
 @click.option("--token", default=None, help="Shared secret for daemon auth. Auto-generated if omitted.")
 @click.option("--e2b-api-key", envvar="E2B_API_KEY", default=None, help="E2B API key.")
@@ -143,7 +142,7 @@ def run(config_path, task, diff, token, e2b_api_key, backend):
 @click.option("--max-attempts", default=5, help="Max coding+validation attempts.")
 @click.option("--app-dir", default=None, type=click.Path(exists=True, file_okay=False),
               help="Directory the coding agent modifies. Defaults to cwd.")
-def loop(config_path, task, token, e2b_api_key, backend, max_attempts, app_dir):
+def loop(config_path, provider, task, token, e2b_api_key, backend, max_attempts, app_dir):
     """Run a coding agent, then validate. Loop until pass or max attempts.
 
     A headless Claude agent implements the task, deploys the result,
@@ -153,7 +152,7 @@ def loop(config_path, task, token, e2b_api_key, backend, max_attempts, app_dir):
     from valid.loop import run_loop
 
     config, config_dir = _require_config(config_path)
-    prov = _make_provider(config, config_dir, token, e2b_api_key)
+    prov = _make_provider(config, config_dir, token, e2b_api_key, provider)
 
     if app_dir is None:
         app_dir = config_dir
