@@ -33,38 +33,38 @@ def _load_dotenv() -> None:
                 os.environ.setdefault(key.strip(), value.strip())
 
 
-def _load_config(config_path: str = None) -> dict:
-    """Load valid.yml from the given path or current directory."""
+def _load_config(config_path: str = None) -> tuple[dict, str]:
+    """Load valid.yml. Returns (config_dict, directory containing the yml)."""
     if config_path:
         import yaml
         with open(config_path) as f:
-            return yaml.safe_load(f) or {}
+            return yaml.safe_load(f) or {}, os.path.dirname(os.path.abspath(config_path))
     for name in ("valid.yml", "valid.yaml"):
         path = os.path.join(os.getcwd(), name)
         if os.path.exists(path):
             import yaml
             with open(path) as f:
-                return yaml.safe_load(f) or {}
-    return {}
+                return yaml.safe_load(f) or {}, os.getcwd()
+    return {}, ""
 
 
-def _require_config(config_path: str = None) -> dict:
-    config = _load_config(config_path)
+def _require_config(config_path: str = None) -> tuple[dict, str]:
+    config, config_dir = _load_config(config_path)
     if not config:
         click.echo("Error: valid.yml not found. Use --config or run from a directory with valid.yml.", err=True)
         sys.exit(1)
     if not config.get("provider"):
         click.echo("Error: 'provider' is required in valid.yml.", err=True)
         sys.exit(1)
-    return config
+    return config, config_dir
 
 
-def _make_provider(config: dict, token: str = None, e2b_api_key: str = None):
-    """Instantiate the deploy provider from config."""
+def _make_provider(config: dict, config_dir: str, token: str = None, e2b_api_key: str = None):
+    """Instantiate the deploy provider from config. Paths resolve relative to config_dir."""
     import uuid
 
     provider = config["provider"]
-    compose_dir = os.getcwd()
+    compose_dir = config_dir
     compose_file = config.get("compose", "docker-compose.yml")
 
     if token is None:
@@ -108,8 +108,8 @@ def run(config_path, task, diff, token, e2b_api_key, backend):
     """Validate an existing diff. Deploy, run validation agent, teardown."""
     from valid.agent import validate
 
-    config = _require_config(config_path)
-    prov = _make_provider(config, token, e2b_api_key)
+    config, config_dir = _require_config(config_path)
+    prov = _make_provider(config, config_dir, token, e2b_api_key)
 
     with open(task) as f:
         task_text = f.read()
@@ -152,19 +152,18 @@ def loop(config_path, task, token, e2b_api_key, backend, max_attempts, app_dir):
     """
     from valid.loop import run_loop
 
-    config = _require_config(config_path)
-    prov = _make_provider(config, token, e2b_api_key)
+    config, config_dir = _require_config(config_path)
+    prov = _make_provider(config, config_dir, token, e2b_api_key)
 
-    compose_dir = os.getcwd()
     if app_dir is None:
-        app_dir = compose_dir
+        app_dir = config_dir
 
     def deploy_fn():
         daemon_url, daemon_token = prov.deploy()
         return {"daemon_url": daemon_url, "daemon_token": daemon_token}
 
     def redeploy_fn(bundle):
-        prov.redeploy(compose_dir)
+        prov.redeploy(config_dir)
 
     def teardown_fn(bundle):
         prov.teardown()
