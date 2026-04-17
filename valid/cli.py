@@ -14,6 +14,24 @@ import click
 from valid import __version__
 
 
+def _load_dotenv() -> None:
+    """Load .env from the current directory if it exists."""
+    env_path = os.path.join(os.getcwd(), ".env")
+    if not os.path.isfile(env_path):
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+    except ImportError:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+
+
 def _load_config() -> dict:
     """Load valid.yml from the current directory."""
     for name in ("valid.yml", "valid.yaml"):
@@ -29,7 +47,7 @@ def _load_config() -> dict:
 @click.version_option(__version__)
 def main():
     """Closed-loop agent validation system."""
-    pass
+    _load_dotenv()
 
 
 @main.command()
