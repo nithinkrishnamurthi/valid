@@ -47,7 +47,9 @@ def ensure_template(api_key: str, cpu_count: int = 2, memory_mb: int = 2048) -> 
     """Return a template ID, building one if it doesn't exist for this version."""
     from e2b import Template
 
-    template_name = f"{TEMPLATE_NAME_PREFIX}{__version__}"
+    # E2B template names can't contain dots
+    safe_version = __version__.replace(".", "-")
+    template_name = f"{TEMPLATE_NAME_PREFIX}{safe_version}"
 
     # Check local cache
     cache = _load_cache()
