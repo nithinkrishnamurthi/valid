@@ -1085,22 +1085,33 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
-    { name = "claude-agent-sdk" },
-    { name = "e2b-code-interpreter" },
+    { name = "anyio" },
+    { name = "click" },
     { name = "mcp" },
-    { name = "python-dotenv" },
     { name = "requests" },
+]
+
+[package.optional-dependencies]
+e2b = [
+    { name = "e2b-code-interpreter" },
+    { name = "python-dotenv" },
+]
+sdk = [
+    { name = "claude-agent-sdk" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.52.0" },
-    { name = "claude-agent-sdk", specifier = ">=0.1.0" },
-    { name = "e2b-code-interpreter", specifier = ">=1.0.0" },
+    { name = "anyio", specifier = ">=4.0.0" },
+    { name = "claude-agent-sdk", marker = "extra == 'sdk'", specifier = ">=0.1.0" },
+    { name = "click", specifier = ">=8.0.0" },
+    { name = "e2b-code-interpreter", marker = "extra == 'e2b'", specifier = ">=1.0.0" },
     { name = "mcp", specifier = ">=1.9.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "python-dotenv", marker = "extra == 'e2b'", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.32.0" },
 ]
+provides-extras = ["e2b", "sdk"]
 
 [[package]]
 name = "wcmatch"

@@ -12,21 +12,32 @@ import tempfile
 from valid.agent import MAX_TURNS, build_prompt
 
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_VALID_MCP_SERVER = os.path.join(_REPO_ROOT, "valid-mcp", "dist", "index.js")
+def _valid_mcp_server_path() -> str:
+    """Locate the bundled valid-mcp server JS file."""
+    bundled = os.path.join(os.path.dirname(__file__), "..", "data", "valid-mcp.js")
+    if os.path.exists(bundled):
+        return os.path.abspath(bundled)
+    # Fallback for development: use repo-local valid-mcp/dist/index.js
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(repo_root, "valid-mcp", "dist", "index.js")
 
 
-def _mcp_config() -> dict:
+def _mcp_config(daemon_url: str = None, daemon_token: str = None) -> dict:
+    tools_args = ["-m", "valid.tools_server"]
+    if daemon_url:
+        tools_args += ["--daemon-url", daemon_url]
+    if daemon_token:
+        tools_args += ["--daemon-token", daemon_token]
+
     return {
         "mcpServers": {
             "validation": {
                 "command": sys.executable,
-                "args": ["-m", "valid.tools_server"],
-                "cwd": _REPO_ROOT,
+                "args": tools_args,
             },
             "valid": {
                 "command": "node",
-                "args": [_VALID_MCP_SERVER],
+                "args": [_valid_mcp_server_path()],
             },
         }
     }
@@ -36,9 +47,11 @@ async def validate_cli(
     task: str,
     implementation_summary: str,
     diff: str,
+    daemon_url: str = None,
+    daemon_token: str = None,
 ) -> dict:
     prompt = build_prompt(task, implementation_summary, diff)
-    mcp_conf = _mcp_config()
+    mcp_conf = _mcp_config(daemon_url, daemon_token)
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, prefix="valid-mcp-"

@@ -104,6 +104,8 @@ async def validate(
     implementation_summary: str,
     diff: str,
     backend: str = None,
+    daemon_url: str = None,
+    daemon_token: str = None,
 ) -> dict:
     """
     Run the validation agent against an already-deployed environment.
@@ -115,6 +117,9 @@ async def validate(
         backend: "cli" for Claude Code, "sdk" for Agent SDK.
                  If None, auto-selects: "cli" if `claude` is on PATH,
                  falls back to "sdk" if ANTHROPIC_API_KEY is set.
+        daemon_url: URL of the remote daemon (e.g. https://xyz.e2b.dev:9090).
+                    If None, falls back to filesystem registry.
+        daemon_token: Bearer token for the daemon.
 
     Returns:
         {"status": "pass"|"fail", "report_path": "...", "reason": "..."}
@@ -124,10 +129,10 @@ async def validate(
 
     if backend == "cli":
         from valid.backends.cli import validate_cli
-        return await validate_cli(task, implementation_summary, diff)
+        return await validate_cli(task, implementation_summary, diff, daemon_url, daemon_token)
     elif backend == "sdk":
         from valid.backends.sdk import validate_sdk
-        return await validate_sdk(task, implementation_summary, diff)
+        return await validate_sdk(task, implementation_summary, diff, daemon_url, daemon_token)
     else:
         raise ValueError(f"Unknown backend: {backend!r}. Use 'cli' or 'sdk'.")
 
