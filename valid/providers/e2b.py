@@ -210,6 +210,34 @@ class E2BProvider:
             self._sbx = None
             raise
 
+    def redeploy(self, compose_dir: str) -> None:
+        """Re-upload app code and restart services."""
+        sbx = self._sbx
+        if sbx is None:
+            raise RuntimeError("No sandbox running — call deploy() first")
+
+        print("Re-uploading app with changes...")
+        _upload_app(sbx, compose_dir)
+
+        print("Restarting services...")
+        sbx.commands.run(
+            f"cd /home/user/app && sudo docker compose -f {self.compose_file} down",
+            timeout=60,
+        )
+        r = sbx.commands.run(
+            f"cd /home/user/app && sudo docker compose -f {self.compose_file} up -d --build",
+            timeout=300,
+        )
+        if r.exit_code != 0:
+            raise RuntimeError(f"docker compose up failed on redeploy:\n{r.stdout}\n{r.stderr}")
+
+        deadline = time.time() + HEALTH_TIMEOUT
+        while time.time() < deadline:
+            if _all_healthy(sbx, self.compose_file):
+                return
+            time.sleep(POLL_INTERVAL)
+        raise TimeoutError(f"Services not healthy after {HEALTH_TIMEOUT}s on redeploy")
+
     def teardown(self) -> None:
         if self._sbx is not None:
             self._sbx.kill()
