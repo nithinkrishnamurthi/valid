@@ -11,14 +11,21 @@ import sys
 from valid.agent import MAX_TURNS, build_prompt
 
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_VALID_MCP_SERVER = os.path.join(_REPO_ROOT, "valid-mcp", "dist", "index.js")
+def _valid_mcp_server_path() -> str:
+    """Locate the bundled valid-mcp server JS file."""
+    bundled = os.path.join(os.path.dirname(__file__), "..", "data", "valid-mcp.js")
+    if os.path.exists(bundled):
+        return os.path.abspath(bundled)
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(repo_root, "valid-mcp", "dist", "index.js")
 
 
 async def validate_sdk(
     task: str,
     implementation_summary: str,
     diff: str,
+    daemon_url: str = None,
+    daemon_token: str = None,
 ) -> dict:
     from claude_agent_sdk import (
         ClaudeSDKClient,
@@ -30,10 +37,20 @@ async def validate_sdk(
 
     prompt = build_prompt(task, implementation_summary, diff)
 
+    tools_args = ["-m", "valid.tools_server"]
+    if daemon_url:
+        tools_args += ["--daemon-url", daemon_url]
+    if daemon_token:
+        tools_args += ["--daemon-token", daemon_token]
+
     options = ClaudeAgentOptions(
         allowed_tools=[
             "mcp__validation__discover_daemons",
             "mcp__validation__exec",
+            "mcp__validation__list_tools",
+            "mcp__validation__call_tool",
+            "mcp__validation__save_asset",
+            "mcp__validation__list_assets",
             "mcp__valid__valid_create",
             "mcp__valid__valid_add_screenshot",
             "mcp__valid__valid_add_text",
@@ -42,10 +59,9 @@ async def validate_sdk(
         mcp_servers={
             "validation": {
                 "command": sys.executable,
-                "args": ["-m", "valid.tools_server"],
-                "cwd": _REPO_ROOT,
+                "args": tools_args,
             },
-            "valid": {"command": "node", "args": [_VALID_MCP_SERVER]},
+            "valid": {"command": "node", "args": [_valid_mcp_server_path()]},
         },
         system_prompt=prompt,
         max_turns=MAX_TURNS,

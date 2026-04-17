@@ -5,12 +5,18 @@ description = "Closed-loop agent validation system"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.52.0",
-    "claude-agent-sdk>=0.1.0",
-    "e2b-code-interpreter>=1.0.0",
+    "anyio>=4.0.0",
+    "click>=8.0.0",
     "mcp>=1.9.0",
-    "python-dotenv>=1.0.0",
     "requests>=2.32.0",
 ]
+
+[project.optional-dependencies]
+e2b = ["e2b-code-interpreter>=1.0.0", "python-dotenv>=1.0.0"]
+sdk = ["claude-agent-sdk>=0.1.0"]
+
+[project.scripts]
+valid = "valid.cli:main"
 
 [build-system]
 requires = ["hatchling"]

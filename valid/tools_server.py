@@ -2,9 +2,10 @@
 Standalone MCP server exposing daemon tools + session assets.
 
 Used by both the Agent SDK backend and Claude Code CLI backend via stdio:
-    python -m valid.tools_server
+    python -m valid.tools_server --daemon-url URL --daemon-token TOKEN
 """
 
+import argparse
 import json
 import asyncio
 import base64
@@ -15,9 +16,30 @@ import time
 import requests
 from mcp.server.fastmcp import FastMCP
 
-from valid import registry
-
 mcp = FastMCP("validation-tools")
+
+# ── Daemon connection ───────────────────────────────────────────────
+# Set via CLI args or configure(). Falls back to filesystem registry.
+
+_DAEMON_URL: str | None = None
+_DAEMON_TOKEN: str | None = None
+
+
+def configure(daemon_url: str | None = None, daemon_token: str | None = None):
+    global _DAEMON_URL, _DAEMON_TOKEN
+    _DAEMON_URL = daemon_url
+    _DAEMON_TOKEN = daemon_token
+
+
+def _discover() -> list[dict]:
+    """Return available daemons — explicit config first, then registry fallback."""
+    if _DAEMON_URL:
+        return [{"name": "daemon", "url": _DAEMON_URL, "token": _DAEMON_TOKEN or ""}]
+    try:
+        from valid import registry
+        return registry.discover()
+    except Exception:
+        return []
 
 # ── Session ──────────────────────────────────────────────────────────
 # Assets are the things the agent wants to keep for the report:
@@ -64,7 +86,7 @@ async def discover_daemons() -> str:
     """List available remote machines. Each entry has a name you can pass
     to the exec tool. Returns an empty list if no remote machines are
     registered — in that case, exec runs locally."""
-    daemons = registry.discover()
+    daemons = _discover()
     if not daemons:
         return "No remote daemons available. Use exec without a daemon to run commands locally."
     entries = [{"name": d["name"], "url": d["url"]} for d in daemons]
@@ -78,7 +100,7 @@ async def exec(command: str, daemon: str = "") -> str:
     locally on this machine."""
 
     if daemon:
-        daemon_map = {d["name"]: d for d in registry.discover()}
+        daemon_map = {d["name"]: d for d in _discover()}
         if daemon not in daemon_map:
             return f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
         d = daemon_map[daemon]
@@ -126,7 +148,7 @@ async def exec(command: str, daemon: str = "") -> str:
 async def list_tools(daemon: str) -> str:
     """List tools available on a remote daemon (e.g. browser automation).
     Returns tool names and schemas. Use call_tool to invoke them."""
-    daemon_map = {d["name"]: d for d in registry.discover()}
+    daemon_map = {d["name"]: d for d in _discover()}
     if daemon not in daemon_map:
         return f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
     d = daemon_map[daemon]
@@ -146,7 +168,7 @@ async def call_tool(daemon: str, name: str, arguments: str = "{}") -> str:
     """Call a tool on a remote daemon. Use list_tools first to see what's
     available. Arguments is a JSON string matching the tool's input schema.
     Screenshots are auto-saved as image assets."""
-    daemon_map = {d["name"]: d for d in registry.discover()}
+    daemon_map = {d["name"]: d for d in _discover()}
     if daemon not in daemon_map:
         return f"Error: Unknown daemon '{daemon}'. Call discover_daemons to see available machines."
     d = daemon_map[daemon]
@@ -221,4 +243,9 @@ async def list_assets() -> str:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--daemon-url", default=None)
+    parser.add_argument("--daemon-token", default=None)
+    args = parser.parse_args()
+    configure(args.daemon_url, args.daemon_token)
     mcp.run(transport="stdio")

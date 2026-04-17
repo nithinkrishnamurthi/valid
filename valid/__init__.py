@@ -1,6 +1,7 @@
 """valid — closed-loop agent validation."""
 
-from valid import registry
+__version__ = "0.1.0"
+
 from valid.agent import validate
 
-__all__ = ["validate", "registry"]
+__all__ = ["validate", "__version__"]
