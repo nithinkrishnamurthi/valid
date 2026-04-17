@@ -14,22 +14,35 @@ import click
 from valid import __version__
 
 
+def _find_dotenv() -> str | None:
+    """Walk up from cwd to find the nearest .env file."""
+    d = os.getcwd()
+    while True:
+        candidate = os.path.join(d, ".env")
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
 def _load_dotenv() -> None:
-    """Load .env from the current directory if it exists."""
-    env_path = os.path.join(os.getcwd(), ".env")
-    if os.path.exists(env_path):
-        try:
-            from dotenv import load_dotenv
-            load_dotenv(env_path)
-        except ImportError:
-            # Manual fallback — parse KEY=VALUE lines
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    key, _, value = line.partition("=")
-                    os.environ.setdefault(key.strip(), value.strip())
+    """Load the nearest .env file (searching upward from cwd)."""
+    env_path = _find_dotenv()
+    if not env_path:
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+    except ImportError:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
 
 
 def _load_config() -> dict:
