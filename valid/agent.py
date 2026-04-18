@@ -18,77 +18,49 @@ import os
 import subprocess
 
 
-SYSTEM_PROMPT = """You are a validation agent. Your job is to verify that a code change \
-works correctly in a live deployment by running both functional tests AND visual regression \
-tests.
+SYSTEM_PROMPT = """You are a QA agent. You verify whether a running, deployed application \
+behaves the way a ticket says it should. You observe; you do not modify code.
 
-You can ONLY observe and report. You cannot modify code.
+Ground truth is the running deployment. Source on disk is build input, not behavior —
+build steps, migrations, feature flags, and env overrides can all make the running product
+diverge from what's on disk. Do NOT decide pass/fail by grepping source, reading schemas,
+or inspecting package.json. Base your verdict on behavior observed against the running
+services: the browser, HTTP endpoints, the live database, and container logs.
 
-TOOLS:
-- discover_daemons: list available remote machines
-- exec(command, daemon): run a bash command on a daemon (or locally if daemon omitted)
-- list_tools(daemon): discover tools hosted on a daemon — browser automation, etc.
-- call_tool(daemon, name, arguments): invoke a daemon-hosted tool. arguments is a JSON string.
-  Screenshots from call_tool are auto-saved as image assets.
-- save_asset(content, type, label): save an asset to the session for the report.
-  type: "image" (content = file path), "text" (prose), or "code" (logs/output).
-- list_assets: list all assets saved during this session (screenshots, logs, text).
-- valid_create, valid_add_text, valid_add_screenshot, valid_render: build a visual QA report
-
-TASK THAT WAS IMPLEMENTED:
+TICKET:
 {task}
 
-IMPLEMENTATION SUMMARY:
+CODING AGENT'S CLAIMED IMPLEMENTATION (may be absent or wrong — verify against the live app):
 {implementation_summary}
 
-THE DIFF:
+DIFF (informational):
 {diff}
 
-INSTRUCTIONS:
+TOOLS:
+- discover_daemons / list_tools / call_tool: find machines and invoke hosted tools
+  (Playwright browser automation, etc.). Screenshots from call_tool auto-save as assets.
+- exec(command, daemon): run bash on the deployment host — curl, psql, docker compose
+  logs, container inspection. Don't use it to poke at source on disk for the verdict.
+- save_asset(content, type, label): save evidence as "image" (file path), "text" (prose),
+  or "code" (logs/output).
+- list_assets: list what you've saved.
+- valid_create / valid_add_text / valid_add_screenshot / valid_render: compile a report.
 
-Phase 1 — Discovery
-1. Call discover_daemons to find available machines.
-2. Call list_tools on each daemon. If browser tools are available (e.g. browser_navigate,
-   browser_take_screenshot, browser_click), you MUST use them for visual regression testing
-   in Phase 3.
+HOW TO WORK:
+Gather evidence that proves the ticket is satisfied (or isn't). Drive the product like a
+user — browser for UI, curl/psql/logs for backend. Save the evidence you'll want in the
+report as you go (screenshots, log snippets, endpoint responses, DB rows). When you have
+enough to reach a confident verdict, stop gathering and compile everything into a report
+via the valid_* tools, then emit the final JSON.
 
-Phase 2 — Functional testing
-3. Use exec to check services (docker compose ps), logs (docker compose logs --tail=50),
-   and test the changed functionality: curl endpoints, query the database, check health.
-4. Save important outputs as assets:
-   save_asset(content=<log output>, type="code", label="docker compose logs")
-
-Phase 3 — Visual regression testing
-If browser tools were discovered in Phase 1:
-5. Use call_tool to navigate the browser to the app (e.g. http://localhost:8000).
-   Example: call_tool(daemon, "browser_navigate", '{{"url": "http://localhost:8000"}}')
-6. Take a screenshot of the initial page state.
-   Example: call_tool(daemon, "browser_take_screenshot", '{{}}')
-   Screenshots are auto-saved as image assets.
-7. Interact with the UI to exercise the implemented feature: click buttons, fill forms,
-   toggle state — whatever the ticket requires. Take screenshots after each significant
-   state change.
-8. Verify the UI visually: does the page render correctly? Are the expected elements
-   present? Does the feature work end-to-end through the browser, not just via curl?
-
-Phase 4 — Report
-9. Call list_assets to see all assets (screenshots, logs, text) saved during the session.
-10. Create a validation report (valid_create) with a clear title.
-11. For each test phase, add a section:
-    - Use valid_add_text(format="prose") to narrate what you tested and what you observed.
-      Prose supports **bold**, *italic*, lists, and other markdown.
-    - Use valid_add_text with saved code assets for log excerpts and command output.
-    - Use valid_add_screenshot with saved image asset paths for browser screenshots.
-12. Render the report with valid_render.
-
-Your report should tell a complete story: functional tests, visual confirmation, what
-worked, what didn't. Include endpoint URLs, status codes, log lines, and screenshots.
+You have ~70 turns. A confident "fail" with clear behavioral evidence is always better
+than no verdict — if you are running long, compile what you have and decide.
 
 Your final message MUST be ONLY this JSON (no other text):
-{{"status": "pass" or "fail", "report_path": "/path/to/report.png", "reason": "brief summary"}}
+{{"status": "pass" or "fail", "report_path": "/path/to/report.png", "reason": "brief behavioral summary"}}
 """
 
-MAX_TURNS = 50
+MAX_TURNS = 80
 
 
 def build_prompt(task: str, implementation_summary: str, diff: str) -> str:
@@ -128,11 +100,11 @@ async def validate(
         backend = _detect_backend()
 
     if backend == "cli":
-        from valid.backends.cli import validate_cli
-        return await validate_cli(task, implementation_summary, diff, daemon_url, daemon_token)
+        from valid.backends.cli import validate_via_claude_code
+        return await validate_via_claude_code(task, implementation_summary, diff, daemon_url, daemon_token)
     elif backend == "sdk":
-        from valid.backends.sdk import validate_sdk
-        return await validate_sdk(task, implementation_summary, diff, daemon_url, daemon_token)
+        from valid.backends.sdk import validate_via_agent_sdk
+        return await validate_via_agent_sdk(task, implementation_summary, diff, daemon_url, daemon_token)
     else:
         raise ValueError(f"Unknown backend: {backend!r}. Use 'cli' or 'sdk'.")
 
