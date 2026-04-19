@@ -100,11 +100,11 @@ async def validate(
         backend = _detect_backend()
 
     if backend == "cli":
-        from valid.backends.cli import validate_via_claude_code
-        return await validate_via_claude_code(task, implementation_summary, diff, daemon_url, daemon_token)
+        from valid.backends.cli import validate_cli
+        return await validate_cli(task, implementation_summary, diff, daemon_url, daemon_token)
     elif backend == "sdk":
-        from valid.backends.sdk import validate_via_agent_sdk
-        return await validate_via_agent_sdk(task, implementation_summary, diff, daemon_url, daemon_token)
+        from valid.backends.sdk import validate_sdk
+        return await validate_sdk(task, implementation_summary, diff, daemon_url, daemon_token)
     else:
         raise ValueError(f"Unknown backend: {backend!r}. Use 'cli' or 'sdk'.")
 
