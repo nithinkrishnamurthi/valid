@@ -21,6 +21,8 @@ POLL_INTERVAL = 3
 HEALTH_TIMEOUT = 120
 DOCKER_READY_TIMEOUT = 60
 MCP_CONFIG_PATH = "/home/user/mcp-config.json"
+POLICY_PATH = "/home/user/policy.json"
+AUDIT_LOG_PATH = "/tmp/daemon-audit.log"
 
 MCP_CONFIG = {
     "mcpServers": {
@@ -29,6 +31,33 @@ MCP_CONFIG = {
             "args": ["-y", "@playwright/mcp", "--headless"],
         }
     }
+}
+
+DEFAULT_POLICY = {
+    "default": "deny",
+    "rules": [
+        {
+            "id": "allow-exec",
+            "tool": "exec",
+            "allow_if": {
+                "command_prefix": [
+                    "npm test", "npm run", "npx ",
+                    "git log", "git diff", "git status",
+                    "cat ", "ls ", "head ", "tail ",
+                    "echo ", "pwd", "which ", "env",
+                    "cd ", "mkdir ", "touch ",
+                    "docker compose", "docker ps",
+                    "curl http://localhost",
+                ]
+            },
+        },
+        {
+            "id": "allow-localhost-browsing",
+            "tool": "browser_*",
+            "allow_if": {"args.url": "http://localhost:*/**"},
+            "deny_if": {"args.url": "http://localhost:*/admin/**"},
+        },
+    ],
 }
 
 
@@ -158,10 +187,14 @@ class E2BProvider:
             print("Uploading MCP config...")
             sbx.files.write(MCP_CONFIG_PATH, json.dumps(MCP_CONFIG).encode())
 
+            print("Uploading policy...")
+            sbx.files.write(POLICY_PATH, json.dumps(DEFAULT_POLICY).encode())
+
             print("Starting daemon...")
             sbx.commands.run(
                 f"sudo -b env DAEMON_TOKEN={self.token} /usr/local/bin/daemon "
                 f"--port {DAEMON_PORT} --mcp-config {MCP_CONFIG_PATH} "
+                f"--policy {POLICY_PATH} --audit-log {AUDIT_LOG_PATH} "
                 f"> /tmp/daemon.log 2>&1",
                 timeout=5,
             )
