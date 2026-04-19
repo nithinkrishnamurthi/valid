@@ -7,15 +7,9 @@ import (
 	"net/http"
 	"os/exec"
 	"time"
-
-	"github.com/nithinkrishnamurthi/valid/daemon/audit"
-	"github.com/nithinkrishnamurthi/valid/daemon/policy"
 )
 
-type ExecPlugin struct {
-	Policy *policy.Engine
-	Audit  *audit.Logger
-}
+type ExecPlugin struct{}
 
 func (p *ExecPlugin) Name() string { return "exec" }
 
@@ -43,29 +37,6 @@ func (p *ExecPlugin) handleExec(w http.ResponseWriter, r *http.Request) {
 	if req.Command == "" {
 		http.Error(w, `{"error":"command is required"}`, http.StatusBadRequest)
 		return
-	}
-
-	// Policy check.
-	if p.Policy != nil {
-		args := map[string]interface{}{"command": req.Command}
-		decision := p.Policy.Evaluate("exec", args)
-		decisionStr := "allow"
-		if !decision.Allowed {
-			decisionStr = "deny"
-		}
-		if p.Audit != nil {
-			p.Audit.Log("exec", args, decisionStr, decision.RuleID)
-		}
-		if !decision.Allowed {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error":   "policy_denied",
-				"rule_id": decision.RuleID,
-				"hint":    decision.Hint,
-			})
-			return
-		}
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
