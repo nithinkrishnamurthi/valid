@@ -11,6 +11,9 @@ import (
 	"os/exec"
 	"sync"
 	"sync/atomic"
+
+	"github.com/nithinkrishnamurthi/valid/daemon/audit"
+	"github.com/nithinkrishnamurthi/valid/daemon/policy"
 )
 
 // ---------- config ----------
@@ -134,9 +137,11 @@ type MCPPlugin struct {
 	children map[string]*mcpChild
 	toolMap  map[string]*mcpChild // tool name → owning child
 	allTools []MCPTool
+	policy   *policy.Engine
+	audit    *audit.Logger
 }
 
-func NewMCPPlugin(configPath string) (*MCPPlugin, error) {
+func NewMCPPlugin(configPath string, pol *policy.Engine, aud *audit.Logger) (*MCPPlugin, error) {
 	f, err := os.Open(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("open config: %w", err)
@@ -151,6 +156,8 @@ func NewMCPPlugin(configPath string) (*MCPPlugin, error) {
 	p := &MCPPlugin{
 		children: make(map[string]*mcpChild),
 		toolMap:  make(map[string]*mcpChild),
+		policy:   pol,
+		audit:    aud,
 	}
 
 	for name, sc := range cfg.MCPServers {
@@ -280,6 +287,28 @@ func (p *MCPPlugin) handleCallTool(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		http.Error(w, fmt.Sprintf(`{"error":"unknown tool: %s"}`, req.Name), http.StatusNotFound)
 		return
+	}
+
+	// Policy check.
+	if p.policy != nil {
+		decision := p.policy.Evaluate(req.Name, req.Arguments)
+		decisionStr := "allow"
+		if !decision.Allowed {
+			decisionStr = "deny"
+		}
+		if p.audit != nil {
+			p.audit.Log(req.Name, req.Arguments, decisionStr, decision.RuleID)
+		}
+		if !decision.Allowed {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error":   "policy_denied",
+				"rule_id": decision.RuleID,
+				"hint":    decision.Hint,
+			})
+			return
+		}
 	}
 
 	resp, err := child.send("tools/call", map[string]interface{}{
