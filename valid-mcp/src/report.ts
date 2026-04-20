@@ -1,12 +1,16 @@
 import crypto from "node:crypto";
 
+export type StatusKind = "pass" | "fail" | "warn";
+
 export interface Item {
-  type: "screenshot" | "text";
+  type: "screenshot" | "text" | "status";
   section?: string;
   label?: string;
   dataUri?: string;
   content?: string;
   format?: "prose" | "code";
+  kind?: StatusKind;
+  message?: string;
 }
 
 export interface Report {

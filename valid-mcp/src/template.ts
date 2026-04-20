@@ -1,4 +1,4 @@
-import type { Report, Item } from "./report.js";
+import type { Report, Item, StatusKind } from "./report.js";
 
 function escapeHtml(text: string): string {
   return text
@@ -81,7 +81,24 @@ function formatDate(date: Date): string {
   });
 }
 
+function renderStatusGroup(entries: { kind: StatusKind; message: string }[]): string {
+  const rows = entries
+    .map(
+      (e) => `
+      <div class="callout-row callout-row-${e.kind}">
+        <span class="callout-label">${e.kind.toUpperCase()}</span>
+        <span class="callout-text">${inlineMarkdown(escapeHtml(e.message))}</span>
+      </div>`
+    )
+    .join("");
+  return `<div class="callout">${rows}</div>`;
+}
+
 function renderItem(item: Item): string {
+  if (item.type === "status") {
+    // Single-item fallback; grouped rendering happens in buildHtml.
+    return renderStatusGroup([{ kind: (item.kind ?? "warn") as StatusKind, message: item.message ?? "" }]);
+  }
   if (item.type === "screenshot") {
     return `
       <div class="item screenshot-item">
@@ -130,6 +147,35 @@ function groupBySections(items: Item[]): { section: string | null; items: Item[]
   return groups;
 }
 
+function renderSectionItems(items: Item[]): string {
+  // Collapse runs of consecutive status items with the same kind into a single
+  // callout. Non-status items render as-is.
+  const parts: string[] = [];
+  let i = 0;
+  while (i < items.length) {
+    const item = items[i];
+    if (item.type === "status") {
+      const entries: { kind: StatusKind; message: string }[] = [
+        { kind: (item.kind ?? "warn") as StatusKind, message: item.message ?? "" },
+      ];
+      let j = i + 1;
+      while (j < items.length && items[j].type === "status") {
+        entries.push({
+          kind: (items[j].kind ?? "warn") as StatusKind,
+          message: items[j].message ?? "",
+        });
+        j++;
+      }
+      parts.push(renderStatusGroup(entries));
+      i = j;
+      continue;
+    }
+    parts.push(renderItem(item));
+    i++;
+  }
+  return parts.join("\n");
+}
+
 export function buildHtml(report: Report): string {
   const groups = groupBySections(report.items);
 
@@ -138,7 +184,7 @@ export function buildHtml(report: Report): string {
       const heading = group.section
         ? `<div class="section-label"><span>${escapeHtml(group.section)}</span></div>`
         : "";
-      const items = group.items.map(renderItem).join("\n");
+      const items = renderSectionItems(group.items);
       const divider = index > 0 ? `<div class="section-divider"></div>` : "";
       return `
         ${divider}
@@ -292,6 +338,51 @@ export function buildHtml(report: Report): string {
   .prose-item li {
     margin-bottom: 2px;
   }
+
+  /* Status callouts */
+  .callout {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 4px 16px;
+    margin-bottom: 20px;
+    background: #ffffff;
+  }
+
+  .callout-row {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 0;
+  }
+
+  .callout-row + .callout-row {
+    border-top: 1px solid #f1f3f5;
+  }
+
+  .callout-label {
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    line-height: 1.4;
+    min-width: 48px;
+    text-align: center;
+    color: #ffffff;
+  }
+
+  .callout-text {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #1f2937;
+  }
+
+  .callout-row-fail .callout-label { background: #dc2626; }
+  .callout-row-pass .callout-label { background: #16a34a; }
+  .callout-row-warn .callout-label { background: #d97706; }
 
   /* Code/text blocks */
   .code-block {

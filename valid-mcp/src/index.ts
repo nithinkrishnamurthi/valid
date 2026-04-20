@@ -82,6 +82,32 @@ server.tool(
 );
 
 server.tool(
+  "valid_add_status",
+  "Add a status finding to the report (pass/fail/warn). Use this for verdict-bearing observations — not for prose context. Consecutive same-kind statuses in the same section render as one callout.",
+  {
+    report_id: z.string().describe("Report ID"),
+    kind: z.enum(["pass", "fail", "warn"]).describe("Finding kind"),
+    message: z.string().describe("Short finding text — one line if possible"),
+    section: z.string().optional().describe("Optional group name"),
+  },
+  async ({ report_id, kind, message, section }) => {
+    const report = getReport(report_id);
+    if (!report) {
+      return {
+        content: [{ type: "text", text: JSON.stringify({ error: `Report not found: ${report_id}` }) }],
+        isError: true,
+      };
+    }
+
+    addItem(report_id, { type: "status", kind, message, section });
+
+    return {
+      content: [{ type: "text", text: JSON.stringify({ ok: true }) }],
+    };
+  }
+);
+
+server.tool(
   "valid_render",
   "Render the report as a PNG image using a headless browser",
   {

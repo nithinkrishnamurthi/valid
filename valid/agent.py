@@ -44,7 +44,9 @@ TOOLS:
 - save_asset(content, type, label): save evidence as "image" (file path), "text" (prose),
   or "code" (logs/output).
 - list_assets: list what you've saved.
-- valid_create / valid_add_text / valid_add_screenshot / valid_render: compile a report.
+- valid_create / valid_add_text / valid_add_screenshot / valid_add_status / valid_render: compile a report.
+  For verdict-bearing findings (e.g. "signup succeeded", "button missing"), call valid_add_status
+  with kind="pass"/"fail"/"warn" — don't write "FAIL: x" inside prose blocks.
 
 HOW TO WORK:
 Gather evidence that proves the ticket is satisfied (or isn't). Drive the product like a
