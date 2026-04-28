@@ -84,7 +84,7 @@ def _save_screenshot_file(data: bytes, ext: str = ".png") -> str:
 @mcp.tool()
 async def discover_daemons() -> str:
     """List available remote machines. Each entry has a name you can pass
-    to the exec tool. Returns an empty list if no remote machines are
+    to the bash tool. Returns an empty list if no remote machines are
     registered — in that case, exec runs locally."""
     daemons = _discover()
     if not daemons:
@@ -94,8 +94,8 @@ async def discover_daemons() -> str:
 
 
 @mcp.tool()
-async def exec(command: str, daemon: str = "") -> str:
-    """Execute a bash command. If 'daemon' is provided, runs on that remote
+async def bash(command: str, daemon: str = "") -> str:
+    """Execute a shell command. If 'daemon' is provided, runs on that remote
     machine (must match a name from discover_daemons). If omitted, runs
     locally on this machine."""
 
@@ -106,7 +106,7 @@ async def exec(command: str, daemon: str = "") -> str:
         d = daemon_map[daemon]
         try:
             resp = requests.post(
-                f"{d['url']}/exec",
+                f"{d['url']}/bash",
                 json={"command": command},
                 headers={"Authorization": f"Bearer {d['token']}"},
                 timeout=35,

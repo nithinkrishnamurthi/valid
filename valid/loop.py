@@ -179,7 +179,6 @@ async def run_loop(
             print("\n--- Validation agent ---")
             verdict = await validate(
                 task=ticket,
-                implementation_summary=summary,
                 diff=diff,
                 backend=backend,
                 daemon_url=_url,

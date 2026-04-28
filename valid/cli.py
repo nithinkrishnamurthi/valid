@@ -117,7 +117,6 @@ def run(config_path, provider, task, diff, token, e2b_api_key, backend):
         try:
             verdict = await validate(
                 task=task_text,
-                implementation_summary="(see diff)",
                 diff=diff,
                 backend=backend,
                 daemon_url=daemon_url,

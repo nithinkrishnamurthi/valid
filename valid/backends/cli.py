@@ -45,12 +45,11 @@ def _mcp_config(daemon_url: str = None, daemon_token: str = None) -> dict:
 
 async def validate_cli(
     task: str,
-    implementation_summary: str,
     diff: str,
     daemon_url: str = None,
     daemon_token: str = None,
 ) -> dict:
-    prompt = build_prompt(task, implementation_summary, diff)
+    prompt = build_prompt(task, diff)
     mcp_conf = _mcp_config(daemon_url, daemon_token)
 
     with tempfile.NamedTemporaryFile(
@@ -61,7 +60,11 @@ async def validate_cli(
 
     allowed = ",".join([
         "mcp__validation__discover_daemons",
-        "mcp__validation__exec",
+        "mcp__validation__bash",
+        "mcp__validation__read",
+        "mcp__validation__write",
+        "mcp__validation__grep",
+        "mcp__validation__glob",
         "mcp__validation__list_tools",
         "mcp__validation__call_tool",
         "mcp__validation__save_asset",

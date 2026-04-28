@@ -22,7 +22,6 @@ def _valid_mcp_server_path() -> str:
 
 async def validate_sdk(
     task: str,
-    implementation_summary: str,
     diff: str,
     daemon_url: str = None,
     daemon_token: str = None,
@@ -35,7 +34,7 @@ async def validate_sdk(
         TextBlock,
     )
 
-    prompt = build_prompt(task, implementation_summary, diff)
+    prompt = build_prompt(task, diff)
 
     tools_args = ["-m", "valid.tools_server"]
     if daemon_url:
@@ -46,7 +45,11 @@ async def validate_sdk(
     options = ClaudeAgentOptions(
         allowed_tools=[
             "mcp__validation__discover_daemons",
-            "mcp__validation__exec",
+            "mcp__validation__bash",
+            "mcp__validation__read",
+            "mcp__validation__write",
+            "mcp__validation__grep",
+            "mcp__validation__glob",
             "mcp__validation__list_tools",
             "mcp__validation__call_tool",
             "mcp__validation__save_asset",

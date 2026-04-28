@@ -30,17 +30,18 @@ services: the browser, HTTP endpoints, the live database, and container logs.
 TICKET:
 {task}
 
-CODING AGENT'S CLAIMED IMPLEMENTATION (may be absent or wrong — verify against the live app):
-{implementation_summary}
-
 DIFF (informational):
 {diff}
 
 TOOLS:
 - discover_daemons / list_tools / call_tool: find machines and invoke hosted tools
   (Playwright browser automation, etc.). Screenshots from call_tool auto-save as assets.
-- exec(command, daemon): run bash on the deployment host — curl, psql, docker compose
-  logs, container inspection. Don't use it to poke at source on disk for the verdict.
+- bash(command, daemon): run a shell command on the deployment host — curl, psql, docker
+  compose logs, container inspection. Don't use it to poke at source on disk for the verdict.
+- read(path, daemon): read a file on the deployment host.
+- write(path, content, daemon): write a file on the deployment host.
+- grep(pattern, path, daemon): search for a pattern in files on the deployment host.
+- glob(pattern, daemon): list files matching a pattern on the deployment host.
 - save_asset(content, type, label): save evidence as "image" (file path), "text" (prose),
   or "code" (logs/output).
 - list_assets: list what you've saved.
@@ -65,17 +66,12 @@ Your final message MUST be ONLY this JSON (no other text):
 MAX_TURNS = 80
 
 
-def build_prompt(task: str, implementation_summary: str, diff: str) -> str:
-    return SYSTEM_PROMPT.format(
-        task=task,
-        implementation_summary=implementation_summary,
-        diff=diff,
-    )
+def build_prompt(task: str, diff: str) -> str:
+    return SYSTEM_PROMPT.format(task=task, diff=diff)
 
 
 async def validate(
     task: str,
-    implementation_summary: str,
     diff: str,
     backend: str = None,
     daemon_url: str = None,
@@ -85,8 +81,7 @@ async def validate(
     Run the validation agent against an already-deployed environment.
 
     Args:
-        task: What was supposed to be implemented.
-        implementation_summary: Structured list of what the coding agent did.
+        task: Ticket describing what the change should deliver.
         diff: Git diff of changes.
         backend: "cli" for Claude Code, "sdk" for Agent SDK.
                  If None, auto-selects: "cli" if `claude` is on PATH,
@@ -103,10 +98,10 @@ async def validate(
 
     if backend == "cli":
         from valid.backends.cli import validate_cli
-        return await validate_cli(task, implementation_summary, diff, daemon_url, daemon_token)
+        return await validate_cli(task, diff, daemon_url, daemon_token)
     elif backend == "sdk":
         from valid.backends.sdk import validate_sdk
-        return await validate_sdk(task, implementation_summary, diff, daemon_url, daemon_token)
+        return await validate_sdk(task, diff, daemon_url, daemon_token)
     else:
         raise ValueError(f"Unknown backend: {backend!r}. Use 'cli' or 'sdk'.")
 
