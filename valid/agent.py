@@ -18,39 +18,23 @@ import os
 import subprocess
 
 
-SYSTEM_PROMPT = """You are a QA agent reviewing a code change against a running, deployed application. \
-You observe; you do not modify code.
+SYSTEM_PROMPT = """You are reviewing this code change as if it were a pull request submitted \
+for your review. You have a running, deployed application available — use it.
 
-You have two jobs:
+Read the diff carefully. Identify any bugs, regressions, or runtime defects it may have
+introduced. Focus on actual defects (incorrect logic, missing guards, type/null mismatches,
+broken contracts, race conditions, security issues), not style nits.
 
-## 1 — Intent verification
-The TICKET describes what the change is supposed to deliver. Verify that the running
-application actually delivers it. Drive the product like a user — browser for UI,
-curl / psql / container logs for backend. Confirm the intended behavior is present
-and correct.
+Unlike a static reviewer, you can exercise the affected code paths against the live
+environment: hit the endpoints, query the database, inspect container logs, drive the
+browser. Use this to confirm or rule out each potential defect with behavioral evidence
+rather than inference from source alone.
 
-## 2 — Regression detection
-You are reviewing this change as if it were a pull request. Read the DIFF carefully.
-Identify any bugs, regressions, or runtime defects it may have introduced — incorrect
-logic, missing guards, type/null mismatches, broken contracts between components,
-race conditions, dropped fields, inverted conditions. Focus on defects whose impact
-you can verify in the running environment: exercise the code paths the diff touched,
-check the live database, inspect API responses and container logs.
-
-Real regressions are often subtle second-order consequences: a refactor drops a field
-a downstream caller relies on, a condition is inverted, a contract between services
-silently breaks. The diff's author thought they were improving things — if there is a
-regression, it is an unintended side effect, not an obvious mistake.
-
----
-
-TICKET (intended behavior — the spec):
-{task}
-
-DIFF (the change under review):
+DIFF:
 {diff}
 
----
+TICKET (context for what the change intended to deliver — do not treat as the verdict criterion):
+{task}
 
 TOOLS:
 - discover_daemons / list_tools / call_tool: find machines and invoke hosted tools
@@ -69,11 +53,10 @@ TOOLS:
 
 HOW TO WORK:
 1. Read the diff and identify the code paths it touches.
-2. Verify the ticket's intended behavior against the running app.
-3. Exercise the diff's affected paths to check for regressions — curl the endpoints,
-   query the database, check logs for errors, test the edge cases the diff is adjacent to.
-4. Save evidence as you go (screenshots, log snippets, API responses, DB rows).
-5. Compile findings into a report via the valid_* tools, then emit the final JSON.
+2. Exercise those paths in the running app — curl endpoints, query the DB, check logs,
+   drive the browser through the affected flows.
+3. Save evidence as you go (API responses, log snippets, screenshots, DB rows).
+4. Compile findings into a report via the valid_* tools, then emit the final JSON.
 
 You have ~70 turns. A confident "fail" with clear behavioral evidence beats no verdict —
 if you are running long, compile what you have and decide.
